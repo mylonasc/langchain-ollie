@@ -11,7 +11,6 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import LLMResult
 
@@ -204,31 +203,6 @@ class LangGraphCallbackHandler(BaseCallbackHandler):
         )
 
     @_safe_callback
-    def on_llm_start(
-        self,
-        serialized: dict[str, Any],
-        prompts: list[str],
-        *,
-        run_id: UUID,
-        parent_run_id: UUID | None = None,
-        tags: list[str] | None = None,
-        metadata: dict[str, Any] | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        model = self._model_name(serialized, kwargs)
-        attributes = self._start_attributes(run_id, parent_run_id, metadata)
-        attributes["model"] = model
-        attributes["prompts"] = self._capture.capture(prompts, redaction=self._redaction)
-        self._start(
-            run_id,
-            parent_run_id,
-            self._label("LLM", model),
-            SpanKind.LLM,
-            attributes,
-            metadata,
-        )
-
-    @_safe_callback
     def on_llm_new_token(
         self,
         token: str | list[str | dict[str, Any]],
@@ -342,52 +316,6 @@ class LangGraphCallbackHandler(BaseCallbackHandler):
 
     @_safe_callback
     def on_tool_error(
-        self,
-        error: BaseException,
-        *,
-        run_id: UUID,
-        parent_run_id: UUID | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        self._error(run_id, error)
-
-    @_safe_callback
-    def on_retriever_start(
-        self,
-        serialized: dict[str, Any],
-        query: str,
-        *,
-        run_id: UUID,
-        parent_run_id: UUID | None = None,
-        tags: list[str] | None = None,
-        metadata: dict[str, Any] | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        name = self._serialized_name(serialized, "retriever")
-        attributes = self._start_attributes(run_id, parent_run_id, metadata)
-        attributes["query"] = self._capture.capture(query, redaction=self._redaction)
-        self._start(
-            run_id,
-            parent_run_id,
-            self._label("Retriever", name),
-            SpanKind.RETRIEVER,
-            attributes,
-            metadata,
-        )
-
-    @_safe_callback
-    def on_retriever_end(
-        self,
-        documents: Sequence[Document],
-        *,
-        run_id: UUID,
-        parent_run_id: UUID | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        self._end(run_id, attributes={"documents": self._project_payload(documents)})
-
-    @_safe_callback
-    def on_retriever_error(
         self,
         error: BaseException,
         *,

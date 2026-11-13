@@ -5,7 +5,6 @@ from typing import Any, cast
 from uuid import UUID
 
 import pytest
-from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
@@ -91,7 +90,7 @@ def test_chain_callbacks_normalize_graph_node_ids_metadata_and_payloads() -> Non
     }
 
 
-def test_model_tool_retriever_usage_streaming_and_cancellation_translation() -> None:
+def test_model_tool_usage_streaming_and_cancellation_translation() -> None:
     recorder = FakeRecorder()
     handler = LangGraphCallbackHandler(
         recorder,
@@ -101,7 +100,6 @@ def test_model_tool_retriever_usage_streaming_and_cancellation_translation() -> 
     parent_id = UUID(int=1)
     model_id = UUID(int=2)
     tool_id = UUID(int=3)
-    retriever_id = UUID(int=4)
 
     handler.on_chat_model_start(
         {"id": ["provider", "FakeChat"]},
@@ -127,16 +125,6 @@ def test_model_tool_retriever_usage_streaming_and_cancellation_translation() -> 
         tool_call_id="call-1",
     )
     handler.on_tool_end(AIMessage(content="result"), run_id=tool_id)
-    handler.on_retriever_start(
-        {"name": "docs"},
-        "question",
-        run_id=retriever_id,
-        parent_run_id=parent_id,
-    )
-    handler.on_retriever_end(
-        [Document(page_content="body", metadata={"token": "hidden"}, id="doc-1")],
-        run_id=retriever_id,
-    )
     handler.on_tool_error(CancelledError(), run_id=tool_id)
     handler.on_chain_error(asyncio.CancelledError(), run_id=parent_id)
 
@@ -167,12 +155,6 @@ def test_model_tool_retriever_usage_streaming_and_cancellation_translation() -> 
         "input": {"query": "safe", "api_key": "<redacted>"},
         "tool_call_id": "call-1",
     }
-    retriever_end = [
-        call for call in recorder.calls if call[0] == "end_span" and call[1][0] == str(retriever_id)
-    ][0]
-    assert retriever_end[2]["attributes"] == {
-        "documents": [{"page_content": "body", "metadata": {"token": "<redacted>"}, "id": "doc-1"}]
-    }
     cancelled = [
         call
         for call in recorder.calls
@@ -195,9 +177,9 @@ def test_metadata_only_capture_retains_model_and_tool_ids_without_payloads() -> 
     recorder = FakeRecorder()
     handler = LangGraphCallbackHandler(recorder)
 
-    handler.on_llm_start(
+    handler.on_chat_model_start(
         {},
-        ["sensitive prompt"],
+        [[HumanMessage(content="sensitive prompt")]],
         run_id=UUID(int=1),
         invocation_params={"model": "model-id"},
     )
@@ -213,7 +195,7 @@ def test_metadata_only_capture_retains_model_and_tool_ids_without_payloads() -> 
     assert llm_attributes == {
         "langchain.run_id": str(UUID(int=1)),
         "model": "model-id",
-        "prompts": {"type": "list", "size": 1},
+        "messages": {"type": "list", "size": 1},
     }
     assert tool_attributes == {
         "langchain.run_id": str(UUID(int=2)),
@@ -310,11 +292,6 @@ def test_callback_names_and_identifiers_are_bounded_without_formatting_objects()
         run_id=UUID(int=3),
         tool_call_id=hostile,
     )
-    handler.on_retriever_start(
-        {"name": "y" * 100},
-        "query",
-        run_id=UUID(int=4),
-    )
     handler.on_tool_start(
         {"name": "safe"},
         "input",
@@ -327,13 +304,12 @@ def test_callback_names_and_identifiers_are_bounded_without_formatting_objects()
         "Node: node",
         "LLM: model",
         "Tool: xxxxxx",
-        "Retriever: y",
         "Tool: safe",
     ]
     assert starts[0][2]["lane_name"] == "node"
     assert starts[0][2]["lane_id"] == "langgraph.no"
     hostile_tool_attributes = cast(dict[str, object], starts[2][2]["attributes"])
-    bounded_tool_attributes = cast(dict[str, object], starts[4][2]["attributes"])
+    bounded_tool_attributes = cast(dict[str, object], starts[3][2]["attributes"])
     assert "tool_call_id" not in hostile_tool_attributes
     assert bounded_tool_attributes["tool_call_id"] == "z" * 12
     assert all(len(cast(str, call[1][1])) <= 12 for call in starts)

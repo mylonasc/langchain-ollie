@@ -11,6 +11,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -39,3 +40,21 @@ jobs:
           uv pip install --python /tmp/wheel-smoke/bin/python dist/*.whl
           cd /tmp
           /tmp/wheel-smoke/bin/python -c 'import langgraph_instrumentation'
+          uv pip install --python /tmp/wheel-smoke/bin/python 'langgraph>=1.2.21,<1.3'
+          /tmp/wheel-smoke/bin/python "$GITHUB_WORKSPACE/examples/local_agent.py" /tmp/wheel-trace.json
+  perfetto:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.21'
+          python-version: '3.12'
+      - run: uv sync --locked --group dev --group agents
+      - name: Provision pinned and checksum-verified importer
+        run: uv run --no-sync python scripts/install_perfetto.py /tmp/trace_processor_shell
+      - name: Real agent artifacts and importer SQL assertions
+        env:
+          PERFETTO_TRACE_PROCESSOR: /tmp/trace_processor_shell
+        run: uv run --no-sync pytest -m perfetto

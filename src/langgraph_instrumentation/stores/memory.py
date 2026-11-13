@@ -46,6 +46,13 @@ class MemoryTraceStore:
         self._traces: dict[TraceId, _TraceState] = {}
         self._lock = threading.RLock()
         self._closed = False
+        self._evicted_traces = 0
+
+    @property
+    def diagnostics(self) -> dict[str, int]:
+        """Lifetime retention loss; available after close without exposing records."""
+        with self._lock:
+            return {"evicted_traces": self._evicted_traces}
 
     def start_span(self, trace: Trace, span: Span) -> None:
         with self._lock:
@@ -190,6 +197,7 @@ class MemoryTraceStore:
             candidates, key=lambda item: (item.trace.start_time_unix_ns, item.trace.trace_id)
         )
         del self._traces[oldest.trace.trace_id]
+        self._evicted_traces += 1
 
     @staticmethod
     def _summary(state: _TraceState) -> TraceSummary:

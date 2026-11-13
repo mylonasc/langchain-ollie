@@ -3,17 +3,13 @@
 from .adapters import LangGraphCallbackHandler
 from .adapters.projection import MessageProjector
 from .clock import Clock, ClockReading, DeterministicClock, SystemClock
+from .exporters import PerfettoExporter
 from .identifiers import (
     DeterministicIdGenerator,
     IdGenerator,
     RandomIdGenerator,
     SpanId,
     TraceId,
-)
-from .instrumentation import (
-    LangGraphInstrumentationHandler,
-    PerfettoLogger,
-    PerfettoTracer,
 )
 from .limits import RecordingLimits
 from .models import (
@@ -38,6 +34,7 @@ from .policies import (
     UsageExtractor,
 )
 from .recorder import RecorderError, SpanProcessor, TraceRecorder
+from .session import RecordingSession
 from .stores import FlushableTraceStore, MemoryTraceStore, TraceStore
 
 __all__ = [
@@ -51,17 +48,16 @@ __all__ = [
     "FlushableTraceStore",
     "IdGenerator",
     "LangGraphCallbackHandler",
-    "LangGraphInstrumentationHandler",
     "MessageProjector",
     "MemoryTraceStore",
     "MetadataProjector",
     "MetricPoint",
-    "PerfettoLogger",
-    "PerfettoTracer",
+    "PerfettoExporter",
     "RandomIdGenerator",
     "RedactionPolicy",
     "RecorderError",
     "RecordingLimits",
+    "RecordingSession",
     "Sanitizer",
     "Span",
     "SpanEvent",

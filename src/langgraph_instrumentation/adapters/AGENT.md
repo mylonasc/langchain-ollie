@@ -29,7 +29,7 @@ or presentation formats.
   `projection.py`. No cross-recording message deduplication or payload cache.
 - Exceptions retain only type by default. Message capture requires separate
   opt-in plus a content policy; internal logs must never format exceptions.
-- REF-02 drops classic LLM/retriever hooks not required by modern agent e2e;
+- Classic LLM/retriever hooks not required by modern agent e2e are dropped;
   REF-03 adds actual Deep Agents tools/delegation/streaming, not callback mocks.
 - Error callbacks must preserve the application's original exception if
   instrumentation also fails. Adapter callback failures are non-fatal by
@@ -40,5 +40,5 @@ or presentation formats.
 
 Test translation directly with a fake recorder, then run deterministic,
 no-network sync and async LangGraph graphs. Cover root/node parentage,
-model/tool/retriever callbacks, fan-out/fan-in, cancellation, projection, and
+model/tool callbacks, fan-out/fan-in, cancellation, projection, and
 streaming configuration.

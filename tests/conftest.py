@@ -1,6 +1,8 @@
 """Default tests are hermetic: no provider credentials or external connections."""
 
+import runpy
 import socket
+from pathlib import Path
 
 import pytest
 
@@ -18,3 +20,9 @@ def offline_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(socket.socket, "connect", blocked)
     monkeypatch.setattr(socket.socket, "connect_ex", blocked)
     monkeypatch.setattr(socket, "create_connection", blocked)
+
+
+@pytest.fixture
+def local_agent():
+    example = Path(__file__).resolve().parents[1] / "examples" / "local_agent.py"
+    return runpy.run_path(str(example))["build_agent"]()

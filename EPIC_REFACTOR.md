@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-- Status: in progress on `epic-refactor`; REF-01 complete, REF-02 next.
+- Status: in progress on `epic-refactor`; REF-01 and REF-02 complete, REF-03 next.
 - Parent issue: [#13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 - Primary outcome: safe, bounded, offline LangGraph and Deep Agents execution
   traces that can be inspected in Perfetto without a service or credentials.
@@ -132,6 +132,20 @@ stable and may become child issues later; this parent initially tracks the slice
   formatting, types, sdist/wheel build and installed-wheel recording smoke pass.
   Hosted CI/current-resolution jobs run when the branch is pushed; this is not
   a claim of completed Deep Agents e2e (REF-03) or pressure-aware retention (REF-04).
+- REF-02: [#15](https://github.com/mylonasc/langgraph_instrumentation/issues/15).
+  M1 delivered: `RecordingSession`, immutable snapshots/export after shutdown,
+  explicit store ownership, atomic deterministic Perfetto output, non-overlapping
+  tracks, numeric containment flow IDs, process/clock/schema identity, and loss
+  diagnostics including retention/destination failures. Removed prototype code,
+  compatibility-only tests, classic completion/retriever hooks, provider-dependent
+  demos, unused extras, and lint/type exclusions. Added a scripted tool-calling
+  LangGraph example and a separate required checksum-pinned Perfetto CI job.
+  Verification: 166 default tests pass on Python 3.12/3.13/3.14; two real sync/async
+  agent artifacts pass Perfetto v59.1 SQL checks for span durations/IDs/parents,
+  token counters, containment flows, and zero importer errors. Lint, formatting,
+  types, package build, core-only wheel smoke, and installed-wheel agent demo pass.
+  Example: `uv run --no-sync python examples/local_agent.py trace.json`.
+  Hosted CI is not yet claimed; the implementation commits remain local.
 
 ### Useful-state checkpoints
 
@@ -462,7 +476,7 @@ Test infrastructure rules:
 ## Tracking checklist and completion policy
 
 - [x] REF-01 — Safety, scope, regression foundation, CI (#14)
-- [ ] REF-02 — Modern LangGraph-to-Perfetto MVP; legacy removal (M1)
+- [x] REF-02 — Modern LangGraph-to-Perfetto MVP; legacy removal (M1, #15)
 - [ ] REF-03 — Real Deep Agents e2e and demo
 - [ ] REF-04 — Bounded efficient recording (M2 with REF-03)
 - [ ] REF-05 — Graph/concurrency/retry/resume semantics

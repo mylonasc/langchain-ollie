@@ -131,10 +131,12 @@ class TraceRecorder:
         service_name: str = "langgraph-instrumentation",
         resource_attributes: Attributes | None = None,
         limits: RecordingLimits | None = None,
+        owns_store: bool = True,
     ) -> None:
         _validate_timeout(shutdown_timeout, "shutdown_timeout")
         _validate_cache_size(completed_context_cache_size)
         self._store = store
+        self._owns_store = owns_store
         self._processors = tuple(processors)
         self._clock = clock or SystemClock()
         self._id_generator = id_generator or RandomIdGenerator()
@@ -143,7 +145,15 @@ class TraceRecorder:
         self._completed_context_cache_size = completed_context_cache_size
         self._limits = limits or RecordingLimits()
         self._counts = {"spans": 0, "events": 0, "metrics": 0}
-        self._dropped = {"spans": 0, "events": 0, "metrics": 0, "attributes": 0, "lanes": 0}
+        self._dropped = {
+            "spans": 0,
+            "events": 0,
+            "metrics": 0,
+            "attributes": 0,
+            "lanes": 0,
+            "destination_failures": 0,
+            "lifecycle": 0,
+        }
         _validate_nonempty_string(service_name, "service_name")
         self._service_name = service_name[:256]
         self._resource_attributes = freeze_attributes(self._bounded_attributes(resource_attributes))
@@ -782,7 +792,7 @@ class TraceRecorder:
             except Exception as error:
                 succeeded = False
                 errors.append(error)
-                _LOGGER.warning("trace recorder failed to process completed span")
+                self._destination_failure("process completed span")
         if errors and self._strict:
             raise RecorderError("failed to process completed span") from errors[0]
         return succeeded
@@ -797,7 +807,7 @@ class TraceRecorder:
             callback(value)
             return True
         except Exception:
-            _LOGGER.warning("trace recorder failed to %s", operation)
+            self._destination_failure(operation)
             return False
 
     def _store_start_span(self, trace: Trace, span: Span) -> bool:
@@ -806,7 +816,7 @@ class TraceRecorder:
                 self._store.start_span(trace, span)
             return True
         except Exception:
-            _LOGGER.warning("trace recorder failed to start span")
+            self._destination_failure("start span")
             return False
 
     def _flush_store(self, deadline: float | None) -> bool:
@@ -856,7 +866,7 @@ class TraceRecorder:
         return self._flush_lock.acquire(timeout=remaining)
 
     def _close_store(self, deadline: float | None) -> bool:
-        if self._store is None:
+        if self._store is None or not self._owns_store:
             return True
         return self._timed_call("close store", self._store.close, deadline)
 
@@ -875,7 +885,7 @@ class TraceRecorder:
         try:
             return callback(remaining)
         except Exception:
-            _LOGGER.warning("trace recorder failed to %s", operation)
+            self._destination_failure(operation)
             return False
 
     def _timed_processor_call(
@@ -887,7 +897,7 @@ class TraceRecorder:
         try:
             return self._invoke_processor(callback, _remaining(deadline))
         except Exception:
-            _LOGGER.warning("trace recorder failed to %s", operation)
+            self._destination_failure(operation)
             return False
 
     def _invoke_processor[Value, Result](
@@ -934,10 +944,21 @@ class TraceRecorder:
         return False
 
     def _lifecycle_failure(self, message: str) -> None:
+        with self._condition:
+            self._dropped["lifecycle"] += 1
+            first = self._dropped["lifecycle"] == 1
         if self._strict:
             raise RecorderError(message)
-        _LOGGER.warning("trace recorder lifecycle operation rejected")
+        if first:
+            _LOGGER.warning("trace recorder lifecycle operation rejected; see diagnostics")
         return None
+
+    def _destination_failure(self, operation: str) -> None:
+        with self._condition:
+            self._dropped["destination_failures"] += 1
+            first = self._dropped["destination_failures"] == 1
+        if first:
+            _LOGGER.warning("trace recorder failed to %s; see diagnostics", operation)
 
     def _bounded_metric_values(
         self, values: Mapping[str, int | float]

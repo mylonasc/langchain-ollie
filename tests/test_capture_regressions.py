@@ -184,6 +184,8 @@ def test_recording_admission_is_finite_and_loss_is_visible() -> None:
         "metrics": 1,
         "attributes": 1,
         "lanes": 1,
+        "destination_failures": 0,
+        "lifecycle": 0,
     }
     snapshot = recorder.diagnostics
     snapshot["spans"] = 999
