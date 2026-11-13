@@ -85,7 +85,7 @@ def test_bounded_sanitizer_does_not_materialize_entire_mapping() -> None:
     assert Sanitizer(max_collection_items=2).sanitize(value) == {
         "0": 0,
         "1": 1,
-        "<truncated>": 999_998,
+        "<truncated>": 1,
     }
     assert value.visited == 3
 
@@ -201,7 +201,7 @@ def test_message_metadata_capture_does_not_retain_message_bodies() -> None:
     projected = projector.project(message)
     serialized = json.dumps(projected)
 
-    assert projected["content"] == {"type": "str", "length": 14}
+    assert isinstance(projected, dict) and projected["content"] == {"type": "str", "length": 14}
     assert "private prompt" not in serialized
     assert "private password" not in serialized
 
@@ -214,15 +214,15 @@ def test_message_none_capture_omits_all_message_payload_fields() -> None:
     assert projected == {"type": "human"}
 
 
-def test_message_projector_replaces_repeated_bodies_with_references() -> None:
+def test_message_projector_preserves_repeated_bodies_in_independent_recordings() -> None:
     projector = MessageProjector(capture=CapturePolicy.bounded())
     message = HumanMessage(id="message-1", content="hello")
 
     first = projector.project(message)
     repeated = projector.project(message)
 
-    assert first["content"] == "hello"
-    assert repeated == {"type": "human", "id": "message-1", "repeated": True}
+    assert isinstance(first, dict) and first["content"] == "hello"
+    assert repeated == first
 
 
 def test_message_projector_does_not_dedupe_changed_content_with_same_id() -> None:
@@ -231,27 +231,25 @@ def test_message_projector_does_not_dedupe_changed_content_with_same_id() -> Non
     projector.project(HumanMessage(id="message-1", content="first"))
     changed = projector.project(HumanMessage(id="message-1", content="second"))
 
-    assert changed["content"] == "second"
+    assert isinstance(changed, dict) and changed["content"] == "second"
 
 
-def test_message_dedupe_cache_uses_fixed_size_hashes() -> None:
+def test_message_projection_has_no_cross_recording_cache() -> None:
     projector = MessageProjector(capture=CapturePolicy.bounded(max_string_length=10))
 
     projector.project(HumanMessage(id="x" * 100_000, content="hello"))
 
-    assert all(len(key) == 32 for key in projector._seen_message_ids)
+    assert not hasattr(projector, "_seen_message_ids")
 
 
-def test_message_projector_bounds_seen_id_cache() -> None:
-    projector = MessageProjector(
-        capture=CapturePolicy.bounded(),
-        max_seen_message_ids=1,
-    )
+def test_message_projector_keeps_independent_messages_self_contained() -> None:
+    projector = MessageProjector(capture=CapturePolicy.bounded())
 
     projector.project(HumanMessage(id="one", content="first"))
     projector.project(HumanMessage(id="two", content="second"))
 
-    assert projector.project(HumanMessage(id="one", content="first"))["content"] == "first"
+    result = projector.project(HumanMessage(id="one", content="first"))
+    assert isinstance(result, dict) and result["content"] == "first"
 
 
 def test_metadata_projector_has_configurable_selection_and_redaction() -> None:
@@ -321,6 +319,41 @@ def test_usage_extractor_reads_message_metadata_and_tolerates_missing_data() -> 
 
     assert UsageExtractor().extract(response) == TokenUsage(2, 3, 5)
     assert UsageExtractor().extract(object()) == TokenUsage()
+
+
+def test_usage_extractor_aggregates_distinct_generations() -> None:
+    first = AIMessage(
+        content="first",
+        usage_metadata={"input_tokens": 2, "output_tokens": 3, "total_tokens": 5},
+    )
+    second = AIMessage(
+        content="second",
+        usage_metadata={"input_tokens": 4, "output_tokens": 6, "total_tokens": 10},
+    )
+    response = LLMResult(
+        generations=[
+            [ChatGeneration(message=first)],
+            [ChatGeneration(message=second)],
+        ]
+    )
+
+    assert UsageExtractor().extract(response) == TokenUsage(6, 9, 15)
+
+
+def test_usage_extractor_prefers_one_aggregate_without_counting_nested_aliases() -> None:
+    message = AIMessage(
+        content="response",
+        usage_metadata={"input_tokens": 100, "output_tokens": 200, "total_tokens": 300},
+    )
+    response = LLMResult(
+        generations=[[ChatGeneration(message=message)]],
+        llm_output={
+            "token_usage": {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
+            "usage": {"input_tokens": 20, "output_tokens": 30, "total_tokens": 50},
+        },
+    )
+
+    assert UsageExtractor().extract(response) == TokenUsage(2, 3, 5)
 
 
 def test_usage_extractor_skips_malformed_candidates_and_supports_provider_aliases() -> None:

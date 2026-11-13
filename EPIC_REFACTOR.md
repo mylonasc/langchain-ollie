@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-- Status: planned; no REF implementation slice is complete by virtue of this plan.
+- Status: in progress on `epic-refactor`; REF-01 complete, REF-02 next.
 - Parent issue: [#13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 - Primary outcome: safe, bounded, offline LangGraph and Deep Agents execution
   traces that can be inspected in Perfetto without a service or credentials.
@@ -120,6 +120,18 @@ stable and may become child issues later; this parent initially tracks the slice
 | E | REF-09 | Optional CPU/RSS process sampling in Perfetto | REF-08 | P2 |
 | E | REF-10 | Optional sampling-profiler interoperability | REF-09 | P3 |
 | E | REF-11 | Optional OpenTelemetry interoperability | REF-08 | P3 |
+
+### Execution evidence
+
+- REF-01: [#14](https://github.com/mylonasc/langgraph_instrumentation/issues/14).
+  Implemented capture/exception privacy, stateless framework projection, finite
+  lifetime admission/payload budgets with loss snapshots, current version bounds,
+  offline guards and CI. Reviewed and incorporated the pre-existing adapter/policy
+  work; unrelated `main.py` and ignored generated artifacts remain untouched.
+  Verification: 159 tests pass on standard CPython 3.12, 3.13 and 3.14; lint,
+  formatting, types, sdist/wheel build and installed-wheel recording smoke pass.
+  Hosted CI/current-resolution jobs run when the branch is pushed; this is not
+  a claim of completed Deep Agents e2e (REF-03) or pressure-aware retention (REF-04).
 
 ### Useful-state checkpoints
 
@@ -449,7 +461,7 @@ Test infrastructure rules:
 
 ## Tracking checklist and completion policy
 
-- [ ] REF-01 — Safety, scope, regression foundation, CI
+- [x] REF-01 — Safety, scope, regression foundation, CI (#14)
 - [ ] REF-02 — Modern LangGraph-to-Perfetto MVP; legacy removal (M1)
 - [ ] REF-03 — Real Deep Agents e2e and demo
 - [ ] REF-04 — Bounded efficient recording (M2 with REF-03)

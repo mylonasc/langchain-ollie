@@ -13,6 +13,7 @@ def test_public_api_is_explicit() -> None:
         "ExecutionLane",
         "FlushableTraceStore",
         "IdGenerator",
+        "LangGraphCallbackHandler",
         "LangGraphInstrumentationHandler",
         "MessageProjector",
         "MemoryTraceStore",
@@ -23,6 +24,7 @@ def test_public_api_is_explicit() -> None:
         "RandomIdGenerator",
         "RedactionPolicy",
         "RecorderError",
+        "RecordingLimits",
         "Sanitizer",
         "Span",
         "SpanEvent",
@@ -45,3 +47,9 @@ def test_public_api_is_explicit() -> None:
 
 def test_store_api_is_explicit() -> None:
     assert stores.__all__ == ["FlushableTraceStore", "MemoryTraceStore", "TraceStore"]
+
+
+def test_adapter_api_is_explicit() -> None:
+    from langgraph_instrumentation import adapters
+
+    assert adapters.__all__ == ["LangGraphCallbackHandler"]

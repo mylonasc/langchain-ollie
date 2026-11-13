@@ -26,7 +26,7 @@ packages, or optional observability SDKs.
 
 ## Implementations
 
-Every implementation, including future SQLite or PostgreSQL stores, must run
+Every implementation, including SQLite in REF-07, must run
 the reusable store contract tests. Durable stores must use transactions for
 multi-record changes, document isolation and retry behavior, version schema
 migrations, and avoid exposing database-specific objects through public APIs.

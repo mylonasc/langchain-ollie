@@ -1,0 +1,41 @@
+name: Quality and offline tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13', '3.14']
+        dependencies: [locked, current]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.21'
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      - name: Resolve current supported versions
+        if: matrix.dependencies == 'current'
+        run: uv lock --upgrade
+      - run: uv sync --locked --group dev --group agents
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+      - run: uv run --no-sync ty check
+      - run: uv run --no-sync pytest --cov=langgraph_instrumentation
+      - run: uv build --out-dir dist
+      - name: Install wheel and import outside checkout
+        shell: bash
+        run: |
+          uv venv --python '${{ matrix.python }}' /tmp/wheel-smoke
+          uv pip install --python /tmp/wheel-smoke/bin/python dist/*.whl
+          cd /tmp
+          /tmp/wheel-smoke/bin/python -c 'import langgraph_instrumentation'

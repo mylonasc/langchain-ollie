@@ -133,7 +133,6 @@ def test_recorder_creates_and_reuses_neutral_trace_metadata() -> None:
         "root span",
         SpanKind.GRAPH,
         trace_name="agent run",
-        trace_attributes={"thread.id": "thread-1"},
     )
     recorder.end_span("root")
     recorder.start_span("late", "late child", SpanKind.NODE, parent_correlation_id="root")
@@ -142,7 +141,7 @@ def test_recorder_creates_and_reuses_neutral_trace_metadata() -> None:
     assert store.traces[0] is store.traces[1]
     assert store.traces[0].name == "agent run"
     assert store.traces[0].service_name == "agent-service"
-    assert store.traces[0].attributes["thread.id"] == "thread-1"
+    assert store.traces[0].attributes == {}
     assert store.traces[0].resource_attributes["environment"] == "test"
 
 

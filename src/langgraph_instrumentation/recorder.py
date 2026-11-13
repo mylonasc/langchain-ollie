@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import threading
@@ -9,10 +10,12 @@ import time
 from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
+from itertools import islice
 from typing import Protocol, Self, TypeVar, cast
 
 from .clock import Clock, SystemClock
 from .identifiers import IdGenerator, RandomIdGenerator, SpanId, TraceId
+from .limits import RecordingLimits
 from .models import (
     Attributes,
     ExecutionLane,
@@ -24,6 +27,7 @@ from .models import (
     Trace,
     freeze_attributes,
 )
+from .policies import RedactionPolicy, Sanitizer
 from .stores.base import FlushableTraceStore, TraceStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -126,6 +130,7 @@ class TraceRecorder:
         completed_context_cache_size: int = 4096,
         service_name: str = "langgraph-instrumentation",
         resource_attributes: Attributes | None = None,
+        limits: RecordingLimits | None = None,
     ) -> None:
         _validate_timeout(shutdown_timeout, "shutdown_timeout")
         _validate_cache_size(completed_context_cache_size)
@@ -136,9 +141,12 @@ class TraceRecorder:
         self._strict = strict
         self._shutdown_timeout = shutdown_timeout
         self._completed_context_cache_size = completed_context_cache_size
+        self._limits = limits or RecordingLimits()
+        self._counts = {"spans": 0, "events": 0, "metrics": 0}
+        self._dropped = {"spans": 0, "events": 0, "metrics": 0, "attributes": 0, "lanes": 0}
         _validate_nonempty_string(service_name, "service_name")
-        self._service_name = service_name
-        self._resource_attributes = freeze_attributes(resource_attributes or {})
+        self._service_name = service_name[:256]
+        self._resource_attributes = freeze_attributes(self._bounded_attributes(resource_attributes))
         self._condition = threading.Condition(threading.Lock())
         self._flush_lock = threading.Lock()
         self._processor_callback = threading.local()
@@ -160,6 +168,49 @@ class TraceRecorder:
         self._close_error: BaseException | None = None
         self._close_attempt: _CloseAttempt | None = None
 
+    @property
+    def diagnostics(self) -> dict[str, int]:
+        """Snapshot of lifetime loss counters; nonzero means an incomplete recording."""
+        with self._condition:
+            return dict(self._dropped)
+
+    def _bounded_attributes(
+        self, attributes: Attributes | None, *, count_loss: bool = True
+    ) -> Attributes:
+        # Direct callers provide trusted JSON values. This is a safety budget,
+        # not a substitute for adapter payload capture/redaction configuration.
+        result = Sanitizer(
+            max_payload_bytes=self._limits.max_attribute_bytes,
+            max_depth=64,
+            max_string_length=None,
+            max_collection_items=None,
+            max_byte_length=None,
+            redaction=RedactionPolicy(keys=frozenset()),
+        ).sanitize(attributes or {})
+        if isinstance(result, dict):
+            if count_loss and any(
+                marker in json.dumps(result)
+                for marker in (
+                    "<truncated",
+                    "<max-depth>",
+                    "<node-budget>",
+                    "<payload-budget>",
+                    "<integer-budget>",
+                )
+            ):
+                self._dropped["attributes"] += 1
+            return result
+        if count_loss:
+            self._dropped["attributes"] += 1
+        return {"recording.truncated": result}
+
+    def _admit(self, kind: str) -> bool:
+        limit = getattr(self._limits, f"max_{kind}")
+        if self._counts[kind] >= limit:
+            self._dropped[kind] += 1
+            return False
+        return True
+
     def start_span(
         self,
         correlation_id: str,
@@ -171,13 +222,12 @@ class TraceRecorder:
         lane_id: str | None = None,
         lane_name: str | None = None,
         trace_name: str | None = None,
-        trace_attributes: Attributes | None = None,
     ) -> Span | None:
         """Start a root or child span and return its immutable active snapshot."""
         _validate_correlation_id(correlation_id)
         if parent_correlation_id is not None:
             _validate_correlation_id(parent_correlation_id, "parent_correlation_id")
-            if trace_name is not None or trace_attributes is not None:
+            if trace_name is not None:
                 raise ValueError("trace metadata may only be supplied for a root span")
 
         def operation() -> Span | None:
@@ -200,6 +250,8 @@ class TraceRecorder:
             if lifecycle_error is not None:
                 return self._lifecycle_failure(lifecycle_error)
             with self._condition:
+                if not self._admit("spans"):
+                    return None
                 reading = self._clock.now()
                 trace_id = (
                     parent.trace_id if parent is not None else self._id_generator.new_trace_id()
@@ -209,10 +261,9 @@ class TraceRecorder:
                     if parent is not None
                     else Trace(
                         trace_id=trace_id,
-                        name=trace_name or name,
+                        name=(trace_name or name)[:256],
                         service_name=self._service_name,
                         start_time_unix_ns=reading.unix_time_ns,
-                        attributes=trace_attributes or {},
                         resource_attributes=self._resource_attributes,
                     )
                 )
@@ -221,11 +272,11 @@ class TraceRecorder:
                     trace_id=trace_id,
                     span_id=self._id_generator.new_span_id(),
                     parent_span_id=parent.span_id if parent is not None else None,
-                    name=name,
+                    name=name[:256],
                     kind=kind,
                     start_time_unix_ns=reading.unix_time_ns,
                     start_time_monotonic_ns=reading.monotonic_time_ns,
-                    attributes=attributes or {},
+                    attributes=self._bounded_attributes(attributes),
                     execution_lane=lane,
                 )
             succeeded = self._store_start_span(trace, span) if self._store else True
@@ -236,6 +287,7 @@ class TraceRecorder:
             with self._condition:
                 self._lanes.setdefault(lane.lane_id, lane)
                 self._active[correlation_id] = _ActiveSpan(correlation_id, trace, span, [])
+                self._counts["spans"] += 1
                 self._generation += 1
             return span
 
@@ -259,14 +311,16 @@ class TraceRecorder:
                     f"cannot add event to unknown or completed span: {correlation_id!r}"
                 )
             with self._condition:
+                if not self._admit("events"):
+                    return None
                 reading = self._clock.now()
                 event = SpanEvent(
                     trace_id=active.span.trace_id,
                     span_id=active.span.span_id,
-                    name=name,
+                    name=name[:256],
                     time_unix_ns=reading.unix_time_ns,
                     time_monotonic_ns=reading.monotonic_time_ns,
-                    attributes=attributes or {},
+                    attributes=self._bounded_attributes(attributes),
                 )
             succeeded = (
                 self._store_call("record event", self._store.record_event, event)
@@ -279,6 +333,7 @@ class TraceRecorder:
                 return None
             with self._condition:
                 active.events.append(event)
+                self._counts["events"] += 1
                 self._generation += 1
             return event
 
@@ -304,22 +359,27 @@ class TraceRecorder:
                     f"cannot record metric for unknown or completed span: {correlation_id!r}"
                 )
             with self._condition:
+                if not self._admit("metrics"):
+                    return None
                 reading = self._clock.now()
                 metric = MetricPoint(
                     trace_id=active.span.trace_id,
                     span_id=active.span.span_id,
-                    name=name,
+                    name=name[:256],
                     time_unix_ns=reading.unix_time_ns,
                     time_monotonic_ns=reading.monotonic_time_ns,
-                    values=values,
-                    attributes=attributes or {},
+                    values=self._bounded_metric_values(values),
+                    attributes=self._bounded_attributes(attributes),
                 )
                 totals_key: tuple[TraceId, str] | None = None
                 updated: dict[str, int | float] | None = None
                 if cumulative:
-                    totals_key = (active.span.trace_id, name)
+                    totals_key = (active.span.trace_id, metric.name)
                     updated = self._metric_totals.get(totals_key, {}).copy()
                     for value_name, value in metric.values.items():
+                        if value_name not in updated and len(updated) >= 64:
+                            self._dropped["attributes"] += 1
+                            continue
                         total = updated.get(value_name, 0) + value
                         if isinstance(total, float) and not math.isfinite(total):
                             raise ValueError(
@@ -339,6 +399,7 @@ class TraceRecorder:
             with self._condition:
                 if totals_key is not None and updated is not None:
                     self._metric_totals[totals_key] = updated
+                self._counts["metrics"] += 1
                 self._generation += 1
             return metric
 
@@ -487,7 +548,7 @@ class TraceRecorder:
         except Exception:
             if exc_type is None:
                 raise
-            _LOGGER.exception("recorder close failed while preserving application exception")
+            _LOGGER.warning("recorder close failed while preserving application exception")
         return False
 
     def _perform_close(self, deadline: float | None) -> tuple[bool, bool]:
@@ -636,8 +697,13 @@ class TraceRecorder:
         if lane_id is None and parent is not None and parent.execution_lane is not None:
             return parent.execution_lane
         resolved_id = lane_id or "main"
+        resolved_id = resolved_id[:256]
+        lane_name = lane_name[:256] if lane_name else None
         lane = self._lanes.get(resolved_id)
         if lane is None:
+            if len(self._lanes) >= self._limits.max_lanes:
+                self._dropped["lanes"] += 1
+                return next(iter(self._lanes.values()))
             lane = ExecutionLane(resolved_id, lane_name, len(self._lanes))
         elif lane_name is not None and lane.name != lane_name:
             raise ValueError(f"execution lane {resolved_id!r} already has a different name")
@@ -653,7 +719,7 @@ class TraceRecorder:
         reading = self._clock.now()
         merged_attributes = dict(active.span.attributes)
         if attributes is not None:
-            merged_attributes.update(attributes)
+            merged_attributes.update(self._bounded_attributes(attributes, count_loss=False))
         return replace(
             active.span,
             end_time_unix_ns=max(reading.unix_time_ns, active.span.start_time_unix_ns),
@@ -661,8 +727,8 @@ class TraceRecorder:
                 reading.monotonic_time_ns, active.span.start_time_monotonic_ns
             ),
             status=status,
-            status_description=description,
-            attributes=merged_attributes,
+            status_description=description[:256] if description else None,
+            attributes=self._bounded_attributes(merged_attributes),
             events=tuple(active.events),
         )
 
@@ -716,7 +782,7 @@ class TraceRecorder:
             except Exception as error:
                 succeeded = False
                 errors.append(error)
-                _LOGGER.exception("trace recorder failed to process completed span")
+                _LOGGER.warning("trace recorder failed to process completed span")
         if errors and self._strict:
             raise RecorderError("failed to process completed span") from errors[0]
         return succeeded
@@ -731,7 +797,7 @@ class TraceRecorder:
             callback(value)
             return True
         except Exception:
-            _LOGGER.exception("trace recorder failed to %s", operation)
+            _LOGGER.warning("trace recorder failed to %s", operation)
             return False
 
     def _store_start_span(self, trace: Trace, span: Span) -> bool:
@@ -740,7 +806,7 @@ class TraceRecorder:
                 self._store.start_span(trace, span)
             return True
         except Exception:
-            _LOGGER.exception("trace recorder failed to start span")
+            _LOGGER.warning("trace recorder failed to start span")
             return False
 
     def _flush_store(self, deadline: float | None) -> bool:
@@ -809,7 +875,7 @@ class TraceRecorder:
         try:
             return callback(remaining)
         except Exception:
-            _LOGGER.exception("trace recorder failed to %s", operation)
+            _LOGGER.warning("trace recorder failed to %s", operation)
             return False
 
     def _timed_processor_call(
@@ -821,7 +887,7 @@ class TraceRecorder:
         try:
             return self._invoke_processor(callback, _remaining(deadline))
         except Exception:
-            _LOGGER.exception("trace recorder failed to %s", operation)
+            _LOGGER.warning("trace recorder failed to %s", operation)
             return False
 
     def _invoke_processor[Value, Result](
@@ -870,8 +936,23 @@ class TraceRecorder:
     def _lifecycle_failure(self, message: str) -> None:
         if self._strict:
             raise RecorderError(message)
-        _LOGGER.warning(message)
+        _LOGGER.warning("trace recorder lifecycle operation rejected")
         return None
+
+    def _bounded_metric_values(
+        self, values: Mapping[str, int | float]
+    ) -> Mapping[str, int | float]:
+        selected = list(islice(values.items(), 65))
+        if len(selected) > 64:
+            self._dropped["attributes"] += 1
+        result = {}
+        for key, value in selected[:64]:
+            if not isinstance(key, str) or len(key) > 128:
+                raise ValueError("metric keys must be strings of at most 128 characters")
+            if isinstance(value, int) and value.bit_length() > 256:
+                raise ValueError("metric integer exceeds safety budget")
+            result[key] = value
+        return result
 
 
 def _validate_correlation_id(value: str, field_name: str = "correlation_id") -> None:
@@ -879,6 +960,8 @@ def _validate_correlation_id(value: str, field_name: str = "correlation_id") -> 
         raise TypeError(f"{field_name} must be a string")
     if not value.strip():
         raise ValueError(f"{field_name} must not be empty")
+    if len(value) > 256:
+        raise ValueError(f"{field_name} must be at most 256 characters")
 
 
 def _context_from_span(trace: Trace, span: Span) -> _SpanContext:

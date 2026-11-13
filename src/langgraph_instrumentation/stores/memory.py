@@ -36,7 +36,7 @@ class MemoryTraceStore:
     Explicit deletion may remove either an active or finalized trace.
     """
 
-    def __init__(self, *, max_traces: int | None = None) -> None:
+    def __init__(self, *, max_traces: int = 128) -> None:
         if max_traces is not None:
             if isinstance(max_traces, bool) or not isinstance(max_traces, int):
                 raise TypeError("max_traces must be an integer or None")

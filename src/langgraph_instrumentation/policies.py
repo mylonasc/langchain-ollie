@@ -4,16 +4,11 @@ from __future__ import annotations
 
 import json
 import math
-import threading
 from base64 import b64encode
-from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from hashlib import blake2b
 from itertools import islice
-
-from langchain_core.messages import BaseMessage
 
 from .models import JSONValue
 
@@ -81,6 +76,8 @@ class CapturePolicy:
     max_string_length: int = 2_000
     max_collection_items: int = 50
     max_byte_length: int = 0
+    max_nodes: int = 2_048
+    max_payload_bytes: int = 16_384
 
     def __post_init__(self) -> None:
         if not isinstance(self.mode, CaptureMode):
@@ -89,6 +86,8 @@ class CapturePolicy:
         _validate_positive(self.max_string_length, "max_string_length")
         _validate_positive(self.max_collection_items, "max_collection_items")
         _validate_non_negative(self.max_byte_length, "max_byte_length")
+        _validate_positive(self.max_nodes, "max_nodes")
+        _validate_positive(self.max_payload_bytes, "max_payload_bytes")
 
     @classmethod
     def none(cls) -> CapturePolicy:
@@ -127,14 +126,15 @@ class CapturePolicy:
         value: object,
         *,
         redaction: RedactionPolicy | None = None,
+        normalize: Callable[[object], object] | None = None,
     ) -> JSONValue:
         if self.mode is CaptureMode.NONE:
             return None
         if self.mode is CaptureMode.METADATA:
-            return _metadata_summary(value, self.max_collection_items)
+            return _metadata_summary(value)
         sanitizer = Sanitizer(
             redaction=redaction,
-            max_depth=self.max_depth if self.mode is CaptureMode.BOUNDED else None,
+            max_depth=self.max_depth if self.mode is CaptureMode.BOUNDED else 64,
             max_string_length=(
                 self.max_string_length if self.mode is CaptureMode.BOUNDED else None
             ),
@@ -142,6 +142,9 @@ class CapturePolicy:
                 self.max_collection_items if self.mode is CaptureMode.BOUNDED else None
             ),
             max_byte_length=self.max_byte_length if self.mode is CaptureMode.BOUNDED else None,
+            max_nodes=self.max_nodes,
+            max_payload_bytes=self.max_payload_bytes,
+            normalize=normalize,
         )
         return sanitizer.sanitize(value)
 
@@ -157,19 +160,32 @@ class Sanitizer:
         max_string_length: int | None = 2_000,
         max_collection_items: int | None = 50,
         max_byte_length: int | None = 0,
+        max_nodes: int = 2_048,
+        max_payload_bytes: int = 16_384,
+        normalize: Callable[[object], object] | None = None,
     ) -> None:
         _validate_optional_positive(max_depth, "max_depth")
         _validate_optional_positive(max_string_length, "max_string_length")
         _validate_optional_positive(max_collection_items, "max_collection_items")
         _validate_optional_non_negative(max_byte_length, "max_byte_length")
+        _validate_positive(max_nodes, "max_nodes")
+        _validate_positive(max_payload_bytes, "max_payload_bytes")
         self._redaction = redaction or RedactionPolicy()
-        self._max_depth = max_depth
+        self._max_depth = min(max_depth or 64, 64)
         self._max_string_length = max_string_length
         self._max_collection_items = max_collection_items
         self._max_byte_length = max_byte_length
+        self._max_nodes = max_nodes
+        self._max_payload_bytes = max_payload_bytes
+        self._normalize = normalize
 
     def sanitize(self, value: object) -> JSONValue:
-        return self._sanitize(value, path=(), depth=0, active_ids=set())
+        result = self._sanitize(value, path=(), depth=0, active_ids=set(), budget=[self._max_nodes])
+        # The traversal budget also bounds intermediate objects. The final encoded
+        # byte budget includes keys/markers/escaping, not just string characters.
+        if len(json.dumps(result, ensure_ascii=True).encode()) > self._max_payload_bytes:
+            return "<payload-budget>"
+        return result
 
     def _sanitize(
         self,
@@ -178,33 +194,49 @@ class Sanitizer:
         path: tuple[str, ...],
         depth: int,
         active_ids: set[int],
+        budget: list[int],
     ) -> JSONValue:
+        if budget[0] <= 0:
+            return "<node-budget>"
+        budget[0] -= 1
+        original = value
+        if self._normalize is not None:
+            value = self._normalize(value)
         if value is None or isinstance(value, (str, bool, int, float, bytes)):
             return self._sanitize_scalar(value)
         if self._max_depth is not None and depth >= self._max_depth:
             return "<max-depth>"
 
-        value_id = id(value)
+        value_id = id(original)
         if value_id in active_ids:
             return "<cycle>"
         active_ids.add(value_id)
         try:
             if isinstance(value, Mapping):
-                return self._sanitize_mapping(value, path, depth, active_ids)
+                return self._sanitize_mapping(value, path, depth, active_ids, budget)
             if isinstance(value, (list, tuple, set, frozenset)):
-                return self._sanitize_collection(value, path, depth, active_ids)
+                return self._sanitize_collection(value, path, depth, active_ids, budget)
             return f"<unsupported:{type(value).__name__}>"
         finally:
             active_ids.remove(value_id)
 
     def _sanitize_scalar(self, value: str | bool | int | float | bytes | None) -> JSONValue:
         if isinstance(value, str):
+            if len(value) > self._max_payload_bytes:
+                return "<payload-budget>"
             if self._max_string_length is None or len(value) <= self._max_string_length:
                 return value
             omitted = len(value) - self._max_string_length
             return f"{value[: self._max_string_length]}<truncated:{omitted}>"
         if isinstance(value, bytes):
-            captured = value if self._max_byte_length is None else value[: self._max_byte_length]
+            if self._max_byte_length is None and len(value) > self._max_payload_bytes:
+                return {"type": "bytes", "length": len(value), "truncated": len(value)}
+            captured = value[
+                : min(
+                    self._max_byte_length if self._max_byte_length is not None else len(value),
+                    self._max_payload_bytes,
+                )
+            ]
             result: dict[str, JSONValue] = {
                 "type": "bytes",
                 "length": len(value),
@@ -216,6 +248,8 @@ class Sanitizer:
             return result
         if isinstance(value, float) and not math.isfinite(value):
             return f"<non-finite:{value}>"
+        if isinstance(value, int) and value.bit_length() > 256:
+            return "<integer-budget>"
         return value
 
     def _sanitize_mapping(
@@ -224,12 +258,14 @@ class Sanitizer:
         path: tuple[str, ...],
         depth: int,
         active_ids: set[int],
+        budget: list[int],
     ) -> dict[str, JSONValue]:
         result: dict[str, JSONValue] = {}
         item_limit = self._max_collection_items
         items = iter(value.items())
-        selected = list(items) if item_limit is None else list(islice(items, item_limit + 1))
-        has_more = item_limit is not None and len(selected) > item_limit
+        item_limit = min(item_limit or self._max_nodes, max(1, budget[0]))
+        selected = list(islice(items, item_limit + 1))
+        has_more = len(selected) > item_limit
         if has_more:
             selected.pop()
         for raw_key, item in selected:
@@ -244,10 +280,11 @@ class Sanitizer:
                     path=(*path, path_key),
                     depth=depth + 1,
                     active_ids=active_ids,
+                    budget=budget,
                 )
         if has_more:
             marker = self._unique_key("<truncated>", result)
-            result[marker] = max(1, len(value) - len(selected))
+            result[marker] = max(1, len(value) - len(selected)) if type(value) is dict else 1
         return result
 
     def _sanitize_collection(
@@ -256,9 +293,10 @@ class Sanitizer:
         path: tuple[str, ...],
         depth: int,
         active_ids: set[int],
+        budget: list[int],
     ) -> list[JSONValue]:
         if isinstance(value, (set, frozenset)):
-            if self._max_collection_items is not None and len(value) > self._max_collection_items:
+            if len(value) > min(self._max_collection_items or self._max_nodes, budget[0]):
                 return [f"<set-items-omitted:{len(value)}>"]
             sanitized = [
                 self._sanitize(
@@ -266,14 +304,16 @@ class Sanitizer:
                     path=(*path, "set-item"),
                     depth=depth + 1,
                     active_ids=active_ids,
+                    budget=budget,
                 )
                 for item in value
             ]
             return sorted(sanitized, key=lambda item: json.dumps(item, sort_keys=True))
 
         item_limit = self._max_collection_items
-        selected = list(value) if item_limit is None else list(islice(iter(value), item_limit + 1))
-        has_more = item_limit is not None and len(selected) > item_limit
+        item_limit = min(item_limit or self._max_nodes, max(1, budget[0]))
+        selected = list(islice(iter(value), item_limit + 1))
+        has_more = len(selected) > item_limit
         if has_more:
             selected.pop()
         result = [
@@ -282,6 +322,7 @@ class Sanitizer:
                 path=(*path, str(index)),
                 depth=depth + 1,
                 active_ids=active_ids,
+                budget=budget,
             )
             for index, item in enumerate(selected)
         ]
@@ -292,6 +333,8 @@ class Sanitizer:
     def _safe_key(self, value: object) -> str:
         if not isinstance(value, str):
             return f"<key:{type(value).__name__}>"
+        if len(value) > self._max_payload_bytes:
+            return "<key-budget>"
         if self._max_string_length is None or len(value) <= self._max_string_length:
             return value
         omitted = len(value) - self._max_string_length
@@ -305,88 +348,6 @@ class Sanitizer:
         while f"{key}#{suffix}" in result:
             suffix += 1
         return f"{key}#{suffix}"
-
-
-class MessageProjector:
-    """Projects LangChain messages without retaining repeated large bodies."""
-
-    def __init__(
-        self,
-        *,
-        capture: CapturePolicy | None = None,
-        redaction: RedactionPolicy | None = None,
-        max_seen_message_ids: int = 50_000,
-    ) -> None:
-        _validate_positive(max_seen_message_ids, "max_seen_message_ids")
-        self._capture = capture or CapturePolicy()
-        self._redaction = redaction or RedactionPolicy()
-        self._max_seen_message_ids = max_seen_message_ids
-        self._seen_message_ids: OrderedDict[str, None] = OrderedDict()
-        self._lock = threading.Lock()
-
-    def project(self, message: BaseMessage) -> dict[str, JSONValue]:
-        if not isinstance(message, BaseMessage):
-            raise TypeError("message must be a BaseMessage")
-
-        message_id = getattr(message, "id", None)
-        result: dict[str, JSONValue] = {"type": message.type}
-        if self._capture.mode is not CaptureMode.NONE:
-            if message_id is not None:
-                result["id"] = Sanitizer(
-                    redaction=self._redaction,
-                    max_depth=self._capture.max_depth,
-                    max_string_length=self._capture.max_string_length,
-                    max_collection_items=self._capture.max_collection_items,
-                    max_byte_length=self._capture.max_byte_length,
-                ).sanitize(message_id)
-            name = getattr(message, "name", None)
-            if name is not None:
-                result["name"] = self._capture.capture(name, redaction=self._redaction)
-            tool_call_id = getattr(message, "tool_call_id", None)
-            if tool_call_id is not None:
-                result["tool_call_id"] = self._capture.capture(
-                    tool_call_id,
-                    redaction=self._redaction,
-                )
-            result["content"] = self._capture.capture(
-                message.content,
-                redaction=self._redaction,
-            )
-            if message.additional_kwargs:
-                result["additional_kwargs"] = self._capture.capture(
-                    message.additional_kwargs,
-                    redaction=self._redaction,
-                )
-            response_metadata = getattr(message, "response_metadata", None)
-            if response_metadata:
-                result["response_metadata"] = self._capture.capture(
-                    response_metadata,
-                    redaction=self._redaction,
-                )
-        if self._capture.mode in (CaptureMode.BOUNDED, CaptureMode.FULL):
-            message_key = self._message_key(result)
-            if self._mark_seen(message_key):
-                return {
-                    key: value
-                    for key, value in result.items()
-                    if key in {"type", "id", "name", "tool_call_id"}
-                } | {"repeated": True}
-        return result
-
-    @staticmethod
-    def _message_key(projected: Mapping[str, JSONValue]) -> str:
-        serialized = json.dumps(projected, sort_keys=True, separators=(",", ":"))
-        return blake2b(serialized.encode("utf-8"), digest_size=16).hexdigest()
-
-    def _mark_seen(self, message_key: str) -> bool:
-        with self._lock:
-            if message_key in self._seen_message_ids:
-                self._seen_message_ids.move_to_end(message_key)
-                return True
-            self._seen_message_ids[message_key] = None
-            if len(self._seen_message_ids) > self._max_seen_message_ids:
-                self._seen_message_ids.popitem(last=False)
-            return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -415,12 +376,15 @@ class MetadataProjector:
             ]
             has_more = False
         else:
-            item_limit = (
-                None if self.capture.mode is CaptureMode.FULL else self.capture.max_collection_items
+            item_limit = min(
+                self.capture.max_nodes,
+                self.capture.max_nodes
+                if self.capture.mode is CaptureMode.FULL
+                else self.capture.max_collection_items,
             )
             items = iter(metadata.items())
-            selected = list(items) if item_limit is None else list(islice(items, item_limit + 1))
-            has_more = item_limit is not None and len(selected) > item_limit
+            selected = list(islice(items, item_limit + 1))
+            has_more = len(selected) > item_limit
             if has_more:
                 selected.pop()
             if any(not isinstance(key, str) for key, _ in selected):
@@ -488,18 +452,16 @@ class UsageExtractor:
     _TOTAL_KEYS = ("total_tokens", "total_token_count")
 
     def extract(self, response: object) -> TokenUsage:
-        for candidate in self._candidates(response):
-            usage = self._from_mapping(candidate)
+        for value in (
+            getattr(response, "llm_output", None),
+            getattr(response, "usage_metadata", None),
+            getattr(response, "response_metadata", None),
+        ):
+            usage = self._from_container(value)
             if usage is not None:
                 return usage
-        return TokenUsage()
 
-    def _candidates(self, response: object) -> list[Mapping[str, object]]:
-        candidates: list[Mapping[str, object]] = []
-        self._append_usage_candidates(candidates, getattr(response, "llm_output", None))
-        self._append_usage_candidates(candidates, getattr(response, "usage_metadata", None))
-        self._append_usage_candidates(candidates, getattr(response, "response_metadata", None))
-
+        per_generation: list[TokenUsage] = []
         generations = getattr(response, "generations", None)
         if isinstance(generations, list):
             for generation_group in generations:
@@ -508,28 +470,35 @@ class UsageExtractor:
                 )
                 for generation in group:
                     message = getattr(generation, "message", None)
-                    self._append_usage_candidates(
-                        candidates,
+                    for value in (
+                        getattr(generation, "usage_metadata", None),
+                        getattr(generation, "response_metadata", None),
+                        getattr(generation, "generation_info", None),
                         getattr(message, "usage_metadata", None),
-                    )
-                    self._append_usage_candidates(
-                        candidates,
                         getattr(message, "response_metadata", None),
-                    )
-        return candidates
+                    ):
+                        usage = self._from_container(value)
+                        if usage is not None:
+                            per_generation.append(usage)
+                            break
+        if not per_generation:
+            return TokenUsage()
+        return TokenUsage(
+            input_tokens=sum(item.input_tokens for item in per_generation),
+            output_tokens=sum(item.output_tokens for item in per_generation),
+            total_tokens=sum(item.total_tokens for item in per_generation),
+        )
 
-    def _append_usage_candidates(
-        self,
-        candidates: list[Mapping[str, object]],
-        value: object,
-    ) -> None:
+    def _from_container(self, value: object) -> TokenUsage | None:
         if not isinstance(value, Mapping):
-            return
-        candidates.append(value)
+            return None
         for key in ("token_usage", "usage", "usage_metadata"):
             nested = value.get(key)
             if isinstance(nested, Mapping):
-                candidates.insert(0, nested)
+                usage = self._from_mapping(nested)
+                if usage is not None:
+                    return usage
+        return self._from_mapping(value)
 
     def _from_mapping(self, usage: Mapping[str, object]) -> TokenUsage | None:
         recognized_keys = self._INPUT_KEYS + self._OUTPUT_KEYS + self._TOTAL_KEYS
@@ -549,7 +518,7 @@ class UsageExtractor:
         )
 
 
-def _metadata_summary(value: object, max_items: int) -> JSONValue:
+def _metadata_summary(value: object) -> JSONValue:
     if value is None:
         return None
     if isinstance(value, str):
@@ -557,7 +526,9 @@ def _metadata_summary(value: object, max_items: int) -> JSONValue:
     if isinstance(value, bytes):
         return {"type": "bytes", "length": len(value)}
     if isinstance(value, Mapping):
-        return {"type": "mapping", "size": len(value)}
+        return (
+            {"type": "mapping", "size": len(value)} if type(value) is dict else {"type": "mapping"}
+        )
     if isinstance(value, (list, tuple, set, frozenset)):
         return {"type": type(value).__name__, "size": len(value)}
     if isinstance(value, (bool, int, float)):

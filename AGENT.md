@@ -3,7 +3,7 @@
 ## Purpose
 
 This repository is being refactored from a prototype into a modular LangGraph
-instrumentation library. Read `EPIC_REFACTOR.md` before implementing any FRK
+instrumentation library. Read `EPIC_REFACTOR.md` before implementing any REF
 feature. Work against the feature's acceptance criteria and dependency list.
 
 ## Repository Rules
@@ -12,6 +12,9 @@ feature. Work against the feature's acceptance criteria and dependency list.
 - Keep examples outside the library package.
 - Do not restore prototype import paths; this refactor intentionally makes a
   clean API break.
+- Modern LangGraph/Deep Agents only. Rewrite or drop uncertain legacy framework
+  features rather than building compatibility wrappers. Perfetto is primary;
+  resource sampling, profiling and OTel are optional lower-priority slices.
 - Preserve existing unrelated worktree changes. Generated artifacts currently
   present in the worktree must not be silently committed or deleted.
 - Never use real credentials or require paid/network LLM calls in tests.
@@ -45,8 +48,8 @@ feature. Work against the feature's acceptance criteria and dependency list.
 ## Required Verification
 
 Each feature must add tests at its own abstraction boundary. Before considering
-an FRK complete, run the repository's configured formatter, linter, type checker,
-unit tests, and package build. If a tool is not configured yet, FRK-01 owns that
+an REF complete, run the repository's configured formatter, linter, type checker,
+unit tests, and package build. If a tool is not configured yet, REF-01 owns that
 configuration; do not introduce an undocumented replacement.
 
 Tests must not depend on:
@@ -61,17 +64,17 @@ Tests must not depend on:
 
 Create scoped `AGENT.md` files with the directory they govern:
 
-- `src/langgraph_instrumentation/adapters/AGENT.md` in FRK-06
-- `src/langgraph_instrumentation/stores/AGENT.md` in FRK-05
-- `src/langgraph_instrumentation/exporters/AGENT.md` in FRK-07
+- `src/langgraph_instrumentation/adapters/AGENT.md` in REF-01
+- `src/langgraph_instrumentation/stores/AGENT.md` in REF-01
+- `src/langgraph_instrumentation/exporters/AGENT.md` in REF-02
 
 The nearest guide supplements this file and should document local protocols,
 forbidden dependencies, and the contract or fixture suite that implementations
-must pass. FRK-10 must review all guides against the final architecture.
+must pass. REF-08 must review all guides against the final architecture.
 
 ## Pull Requests
 
-- Include the feature ID, for example `FRK-05`, in the title.
+- Include the feature ID, for example `REF-05`, in the title.
 - Link the feature issue and parent epic.
 - State which acceptance criteria are satisfied.
 - Identify deferred work explicitly instead of adding speculative compatibility
@@ -81,3 +84,6 @@ must pass. FRK-10 must review all guides against the final architecture.
   with its origin, impact, rationale, priority, and completion condition. Never
   use technical debt to bypass correctness, security, data-loss,
   public-contract, or required-test failures.
+- Work on the single `epic-refactor` branch. Commit completed slices separately;
+  update `EPIC_REFACTOR.md` and parent issue #13 with verification evidence. Close
+  child issues/checklist entries only after their prerequisites and gates pass.

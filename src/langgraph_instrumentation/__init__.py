@@ -1,5 +1,7 @@
 """LangGraph tracing and observability instrumentation."""
 
+from .adapters import LangGraphCallbackHandler
+from .adapters.projection import MessageProjector
 from .clock import Clock, ClockReading, DeterministicClock, SystemClock
 from .identifiers import (
     DeterministicIdGenerator,
@@ -13,6 +15,7 @@ from .instrumentation import (
     PerfettoLogger,
     PerfettoTracer,
 )
+from .limits import RecordingLimits
 from .models import (
     ExecutionLane,
     MetricPoint,
@@ -28,7 +31,6 @@ from .models import (
 from .policies import (
     CaptureMode,
     CapturePolicy,
-    MessageProjector,
     MetadataProjector,
     RedactionPolicy,
     Sanitizer,
@@ -48,6 +50,7 @@ __all__ = [
     "ExecutionLane",
     "FlushableTraceStore",
     "IdGenerator",
+    "LangGraphCallbackHandler",
     "LangGraphInstrumentationHandler",
     "MessageProjector",
     "MemoryTraceStore",
@@ -58,6 +61,7 @@ __all__ = [
     "RandomIdGenerator",
     "RedactionPolicy",
     "RecorderError",
+    "RecordingLimits",
     "Sanitizer",
     "Span",
     "SpanEvent",
