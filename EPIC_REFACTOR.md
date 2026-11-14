@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-- Status: in progress on `epic-refactor`; REF-01 through REF-07 complete, REF-08 next.
+- Status: core REF-01 through REF-08 complete on `epic-refactor`; optional slices follow.
 - Parent issue: [#13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 - Primary outcome: safe, bounded, offline LangGraph and Deep Agents execution
   traces that can be inspected in Perfetto without a service or credentials.
@@ -213,8 +213,10 @@ stable and may become child issues later; this parent initially tracks the slice
   including SQLite/CLI, MIT metadata, security/upgrade/schema policy and `py.typed`.
   Reviewed scoped guides and removed stale progress claims. Local evidence: 232
   default tests on CPython 3.12/3.13/3.14, 11 importer tests, lint/format/types/build,
-  and clean-wheel offline demos outside checkout pass. Hosted expanded matrix is
-  pending; REF-07's current-toolchain annotation warning is fixed in this slice.
+  and clean-wheel offline demos outside checkout pass. All ten required hosted jobs
+  passed: https://github.com/mylonasc/langgraph_instrumentation/actions/runs/43579733564.
+  REF-07's current-toolchain annotation warning is fixed. M4/core acceptance is met;
+  this is not a package publication or merge authorization.
 
 ### Useful-state checkpoints
 
@@ -551,7 +553,7 @@ Test infrastructure rules:
 - [x] REF-05 — Graph/concurrency/retry/resume semantics (#18)
 - [x] REF-06 — Failure isolation and lifecycle (M3 with REF-05, #19)
 - [x] REF-07 — SQLite durability and reopen (#20)
-- [ ] REF-08 — Local-first release (M4; core epic complete)
+- [x] REF-08 — Local-first release (M4; core epic complete, #21)
 - [ ] REF-09 — Optional CPU/RSS sampling
 - [ ] REF-10 — Optional sampling-profiler interoperability / go-no-go
 - [ ] REF-11 — Optional OpenTelemetry bridge
