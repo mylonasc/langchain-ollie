@@ -7,6 +7,11 @@ operation raises ``RuntimeError`` before validating its other arguments.
 Query results are immutable snapshots and are ordered as documented by the
 individual methods.
 
+Exact span start/completion replays are idempotent; conflicting replays raise.
+Event/metric appends do not carry operation IDs and must not be retried
+automatically after an ambiguous commit. A future remote store must document
+uncertain acknowledgements rather than claim exceptions always prove rollback.
+
 Stores may commit synchronously, in which case they need not implement
 ``FlushableTraceStore``. Durable or buffered implementations can expose that
 optional protocol so the recorder can include them in a flush barrier.

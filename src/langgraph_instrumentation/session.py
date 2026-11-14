@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+import time
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Protocol, Self, TextIO, runtime_checkable
 from uuid import uuid4
@@ -13,7 +16,7 @@ from .exporters import PerfettoExporter
 from .limits import RecordingLimits
 from .models import TraceBundle, TraceQuery
 from .policies import CapturePolicy, RedactionPolicy
-from .recorder import TraceRecorder
+from .recorder import SpanProcessor, TraceRecorder
 from .stores import MemoryTraceStore, TraceStore
 
 _CLOCK_DOMAIN = f"{os.getpid()}:{uuid4().hex}"
@@ -43,6 +46,7 @@ class RecordingSession:
         service_name: str = "local-agent",
         strict: bool = False,
         capture_streaming_tokens: bool = False,
+        processors: Iterable[SpanProcessor] = (),
     ) -> None:
         self._limits = limits or RecordingLimits()
         self._strict = strict
@@ -56,6 +60,7 @@ class RecordingSession:
             owns_store=False,
             strict=strict,
             service_name=service_name,
+            processors=processors,
             resource_attributes={
                 "process.pid": os.getpid(),
                 "process.clock.id": f"{os.getpid()}:{_CLOCK_DOMAIN}",
@@ -71,6 +76,9 @@ class RecordingSession:
         self._finished: tuple[TraceBundle, ...] | None = None
         self._closed = False
         self._finished_diagnostics: dict[str, int] | None = None
+        self._finalize_lock = threading.Lock()
+        self._finalizing_thread: int | None = None
+        self._close_result = True
 
     @property
     def diagnostics(self) -> dict[str, int]:
@@ -102,17 +110,35 @@ class RecordingSession:
 
     def close(self, timeout: float | None = None) -> bool:
         if self._closed:
-            return True
-        if self._finished is None:
-            if not self.recorder.close(timeout):
-                return False
-            self._finished = self.snapshot()
-            self._finished_diagnostics = self.diagnostics
-        if self._owns_store:
-            self._closed = self._store.close(timeout)
-            return self._closed
-        self._closed = True
-        return True
+            return self._close_result
+        if self._finalizing_thread == threading.get_ident():
+            return False
+        start = time.monotonic()
+        recorder_ok = self.recorder.close(timeout)
+        if not recorder_ok and not self.recorder.is_closed:
+            return False
+        remaining = None if timeout is None else max(0.0, timeout - (time.monotonic() - start))
+        acquired = (
+            self._finalize_lock.acquire()
+            if remaining is None
+            else self._finalize_lock.acquire(timeout=remaining)
+        )
+        if not acquired:
+            return False
+        try:
+            if self._closed:
+                return self._close_result
+            self._finalizing_thread = threading.get_ident()
+            if self._finished is None:
+                self._finished = self.snapshot()
+                self._finished_diagnostics = self.diagnostics
+            store_ok = self._store.close(remaining) if self._owns_store else True
+            self._closed = store_ok
+            self._close_result = recorder_ok and store_ok
+            return self._close_result
+        finally:
+            self._finalizing_thread = None
+            self._finalize_lock.release()
 
     def __enter__(self) -> Self:
         return self

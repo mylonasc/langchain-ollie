@@ -179,5 +179,5 @@ def test_non_strict_session_does_not_replace_success_with_recording_failure(capl
     assert json.loads(output.getvalue())["otherData"]["incomplete"]
     assert "PRIVATE-CANARY" not in caplog.text
     store.fail = False
-    assert session.close()
+    assert not session.close()  # failure outcome remains stable after resources close
     store.close()

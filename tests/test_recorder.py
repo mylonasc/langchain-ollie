@@ -211,14 +211,14 @@ class FailingProcessor(FakeProcessor):
         raise OSError("processor unavailable")
 
 
-def test_store_completion_failures_do_not_commit_or_dispatch_processors() -> None:
+def test_store_failure_isolated_by_default_and_retryable_in_strict_mode() -> None:
     good = FakeProcessor()
     recorder = TraceRecorder(FailingStore(), processors=(good,))
     recorder.start_span("span", "operation", SpanKind.CUSTOM)
     completed = recorder.end_span("span")
-    assert completed is None
-    assert good.spans == []
-    assert "span" in recorder._active
+    assert completed is not None
+    assert good.spans == [completed]
+    assert "span" not in recorder._active
 
     strict_good = FakeProcessor()
     strict = TraceRecorder(FailingStore(), processors=(strict_good,), strict=True)
@@ -260,7 +260,7 @@ def test_close_abandons_children_first_and_close_and_flush_are_idempotent() -> N
     assert store.closes == processor.shutdowns == 1
 
 
-@pytest.mark.parametrize("strict", [False, True])
+@pytest.mark.parametrize("strict", [True])
 def test_close_retries_only_abandoned_spans_rejected_by_store(strict: bool) -> None:
     class FailOnceMemoryStore(MemoryTraceStore):
         def __init__(self) -> None:
@@ -368,8 +368,8 @@ def test_concurrent_close_callers_share_retryable_attempt_result() -> None:
         assert first.result() is False
         assert second.result() is False
 
-    assert store.close_calls == 0
-    assert recorder.close() is True
+    assert store.close_calls == 1
+    assert recorder.close() is False  # final loss result is stable; no repeated dispatch
     assert store.close_calls == 1
 
 
@@ -512,7 +512,7 @@ def test_store_operations_remain_ordered_when_start_is_blocked() -> None:
     assert store.operations == ["start-enter", "start-exit", "event", "metric", "complete"]
 
 
-@pytest.mark.parametrize("strict", [False, True])
+@pytest.mark.parametrize("strict", [True])
 def test_store_failures_leave_each_transition_retryable_and_atomic(strict: bool) -> None:
     class FailOnceStore(FakeStore):
         def __init__(self) -> None:
@@ -597,11 +597,10 @@ def test_delayed_child_rejected_after_store_eviction_does_not_become_active() ->
     )
     store.start_span(replacement, replacement_span)
 
-    assert (
-        recorder.start_span("delayed", "delayed", SpanKind.NODE, parent_correlation_id="root")
-        is None
-    )
-    assert "delayed" not in recorder._active
+    delayed = recorder.start_span("delayed", "delayed", SpanKind.NODE, parent_correlation_id="root")
+    assert delayed is not None
+    assert "delayed" in recorder._active
+    assert recorder.diagnostics["destination_failures"] == 1
 
 
 def test_trace_context_and_totals_are_released_after_last_active_span() -> None:

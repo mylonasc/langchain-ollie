@@ -78,6 +78,11 @@ class MemoryTraceStore:
             elif _active_trace(state.trace) != trace:
                 raise ValueError(f"conflicting metadata for trace {trace.trace_id}")
             if span.span_id in state.spans:
+                existing = state.spans[span.span_id]
+                if existing == span or (
+                    existing.is_finished and _same_started_span(span, existing)
+                ):
+                    return
                 raise ValueError(f"span already exists: {span.span_id}")
             if span.parent_span_id is not None and span.parent_span_id not in state.spans:
                 raise ValueError(f"parent span does not exist: {span.parent_span_id}")
@@ -119,6 +124,8 @@ class MemoryTraceStore:
             if active is None:
                 raise ValueError(f"span does not exist: {span.span_id}")
             if active.is_finished:
+                if active == span:
+                    return
                 raise ValueError(f"span is already complete: {span.span_id}")
             if not _same_started_span(active, span):
                 raise ValueError(f"completed span conflicts with its start: {span.span_id}")

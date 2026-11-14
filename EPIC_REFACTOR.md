@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-- Status: in progress on `epic-refactor`; REF-01 through REF-05 complete, REF-06 next.
+- Status: in progress on `epic-refactor`; REF-01 through REF-06 complete, REF-07 next.
 - Parent issue: [#13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 - Primary outcome: safe, bounded, offline LangGraph and Deep Agents execution
   traces that can be inspected in Perfetto without a service or credentials.
@@ -186,6 +186,18 @@ stable and may become child issues later; this parent initially tracks the slice
   tracks. Verification: 201 default tests, seven importer tests, lint/format/types
   and build pass. Runtime metadata is preserved; unsupported automatic DAG-edge
   inference is deliberately not fabricated.
+
+- REF-06: [#19](https://github.com/mylonasc/langgraph_instrumentation/issues/19).
+  Best-effort lifecycle now survives destination rejection and dispatches completed
+  resource-bearing spans to independent processors. Strict mode retains explicit
+  retry semantics. Queue admission is bounded, session finalization is serialized
+  without locking processor execution, and exact store start/completion replays
+  are idempotent. Documented ambiguous append acknowledgements and cooperative
+  timeout limits. Real tests inject all store phases/export failure, slow stores,
+  concurrent close, pending-pressure and reentry, early Deep Agents stream closure
+  and cancellation inside an async tool. Verification: 212 default tests, seven
+  importer tests and lint/format/types/build pass; no application-error replacement
+  or payload-bearing failure logs. M3 is delivered with REF-05.
 
 ### Useful-state checkpoints
 
@@ -520,7 +532,7 @@ Test infrastructure rules:
 - [x] REF-03 — Real Deep Agents e2e and demo (#16)
 - [x] REF-04 — Bounded efficient recording (M2 with REF-03, #17)
 - [x] REF-05 — Graph/concurrency/retry/resume semantics (#18)
-- [ ] REF-06 — Failure isolation and lifecycle (M3 with REF-05)
+- [x] REF-06 — Failure isolation and lifecycle (M3 with REF-05, #19)
 - [ ] REF-07 — SQLite durability and reopen
 - [ ] REF-08 — Local-first release (M4; core epic complete)
 - [ ] REF-09 — Optional CPU/RSS sampling

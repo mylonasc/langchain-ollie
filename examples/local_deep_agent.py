@@ -40,7 +40,9 @@ class OfflineDeepAgent:
     worker: ScriptedModel
 
 
-def build_deep_agent(*, report: str = "Local report", invocations: int = 1) -> OfflineDeepAgent:
+def build_deep_agent(
+    *, report: str = "Local report", invocations: int = 1, worker_tool=None
+) -> OfflineDeepAgent:
     """Use only virtual state files. No shell or host-filesystem tools are offered."""
     if invocations < 1:
         raise ValueError("invocations must be positive")
@@ -90,7 +92,7 @@ def build_deep_agent(*, report: str = "Local report", invocations: int = 1) -> O
                 "description": "Offline multiplication worker",
                 "system_prompt": "Use the supplied local multiplication tool.",
                 "model": worker,
-                "tools": [multiply],
+                "tools": [worker_tool or multiply],
                 "middleware": [FilesystemMiddleware(tools=["read_file"])],
             }
         ],

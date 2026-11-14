@@ -20,6 +20,7 @@ class RecordingLimits:
     max_span_events: int = 128
     max_active_spans: int = 128
     max_span_age_ns: int = 600_000_000_000
+    max_pending_operations: int = 256
 
     def __post_init__(self) -> None:
         for name in self.__dataclass_fields__:

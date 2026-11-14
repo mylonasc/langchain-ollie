@@ -398,7 +398,7 @@ class LangGraphCallbackHandler(BaseCallbackHandler):
         try:
             status = (
                 SpanStatus.CANCELLED
-                if isinstance(error, (asyncio.CancelledError, FuturesCancelledError))
+                if isinstance(error, (asyncio.CancelledError, FuturesCancelledError, GeneratorExit))
                 else SpanStatus.ERROR
             )
             error_type = self._exception_type(error)

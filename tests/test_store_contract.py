@@ -154,7 +154,8 @@ def test_contract_failures_are_atomic_and_close_is_idempotent(store_factory: Sto
     before = store.get_trace(trace.trace_id)
 
     with pytest.raises(ValueError, match="already exists"):
-        store.start_span(trace, root)
+        store.start_span(trace, replace(root, name="conflicting start"))
+    store.start_span(trace, root)  # exact replay is idempotent
     with pytest.raises(ValueError, match="parent span"):
         store.start_span(trace, make_span(trace, 2, parent_span_id=SpanId(99)))
     with pytest.raises(ValueError, match="span does not exist"):

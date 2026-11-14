@@ -183,6 +183,28 @@ dependency timeouts are cooperative, not hard cancellation. Preserve your origin
 application exception when instrumentation also fails. Strict mode is for tests
 and diagnostics, not the default production failure policy.
 
+Accepted in-memory lifecycle is independent of destinations in default mode.
+If a store start/event/completion fails, correlation continues and independent
+`processors=` still receive completed immutable spans (including resource/service
+identity). The failing store may contain a partial recording; diagnostics disclose
+loss, not durability. Detailed event failure stops writes for that span rather than
+attempting a misleading completion against incomplete persisted events. Strict
+mode instead rejects failed transitions and permits explicit diagnostic retries.
+Destination diagnostics are body-free and rate-limited.
+
+At most 256 lifecycle operations may queue behind a slow store. Caller wait
+timeouts do not forcibly cancel uncooperative Python callbacks; release or stop
+such a destination to complete background shutdown. Callbacks must not drive their
+own recorder lifecycle; processor reentry is rejected. Concurrent session close
+shares recorder shutdown and serializes final snapshots/resource cleanup. A failed
+best-effort close has a stable `False` result and does not redispatch spans; final
+snapshots remain readable once resources have quiesced.
+
+Exact store span start/completion replays are idempotent; conflicting replays fail.
+Event/metric appends lack operation IDs and are **not** automatically retried after
+an uncertain acknowledgement. A remote commit can succeed before its response is
+lost: the store protocol does not promise that every remote exception proves rollback.
+
 ## Supported scope and migration
 
 The locked/minimum baseline is `langchain-core==1.8.0`, `langgraph==1.2.21`, and

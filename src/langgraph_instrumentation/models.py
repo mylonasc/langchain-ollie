@@ -221,6 +221,7 @@ class Span:
     events: tuple[SpanEvent, ...] = ()
     execution_lane: ExecutionLane | None = None
     links: tuple[SpanLink, ...] = ()
+    resource_attributes: Attributes = field(default_factory=lambda: _EMPTY_ATTRIBUTES)
 
     def __post_init__(self) -> None:
         _validate_instance(self.trace_id, TraceId, "trace_id")
@@ -271,6 +272,7 @@ class Span:
         for link in self.links:
             _validate_instance(link, SpanLink, "link")
         object.__setattr__(self, "links", tuple(self.links))
+        object.__setattr__(self, "resource_attributes", freeze_attributes(self.resource_attributes))
 
     @property
     def is_finished(self) -> bool:
@@ -299,6 +301,7 @@ class Span:
             "events": [event.to_dict() for event in self.events],
             "execution_lane": self.execution_lane.to_dict() if self.execution_lane else None,
             "links": [link.to_dict() for link in self.links],
+            "resource_attributes": attributes_to_dict(self.resource_attributes),
         }
 
     @classmethod
@@ -325,6 +328,7 @@ class Span:
                 SpanLink.from_dict(_expect_mapping(item, "link"))
                 for item in _required_list(data, "links", default=[])
             ),
+            resource_attributes=_attributes_from_data(data, "resource_attributes"),
             events=tuple(
                 SpanEvent.from_dict(_expect_mapping(item, "event")) for item in events_data
             ),

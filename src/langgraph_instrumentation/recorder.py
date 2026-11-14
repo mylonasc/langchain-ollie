@@ -58,6 +58,10 @@ class _ClosingError(RuntimeError):
     pass
 
 
+class _AdmissionError(RecorderError):
+    pass
+
+
 class _RetryableCloseError(RecorderError):
     pass
 
@@ -71,6 +75,7 @@ class _ActiveSpan:
     chunks: int = 0
     first_chunk_ns: int | None = None
     last_chunk_ns: int | None = None
+    persisted: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +84,7 @@ class _SpanContext:
     span_id: SpanId
     execution_lane: ExecutionLane | None
     status: SpanStatus
+    persisted: bool = True
 
     @property
     def trace_id(self) -> TraceId:
@@ -105,11 +111,12 @@ class _CloseAttempt:
 class TraceRecorder:
     """Coordinate span lifecycle independently of callback execution context.
 
-    Store operations are globally ordered by recorder-call admission. A store
-    failure never commits the corresponding in-memory transition, so the caller
-    may retry it. Strict mode raises ``RecorderError``; non-strict mode returns
-    ``None``. Processors run only after completion is accepted by the store and
-    never while the recorder's state lock is held.
+    Store operations are globally ordered by recorder-call admission. Strict
+    recording mode keeps rejected transitions retryable and raises RecorderError.
+    Default best-effort mode accepts lifecycle independently of persistence:
+    failed destination writes disclose loss, never erase parent context, and never
+    block independent processors. Resource-bearing completed spans are dispatched
+    once, outside state locks; this is not an exactly-once delivery guarantee.
 
     ``force_flush`` and ``close`` accept seconds-based caller wait timeouts.
     Shutdown dependencies receive the recorder-wide ``shutdown_timeout`` budget
@@ -118,9 +125,9 @@ class TraceRecorder:
     can delay background shutdown; hard cancellation is deliberately avoided.
     Completed correlation contexts are retained without payloads in a bounded,
     completion-ordered cache so delayed children can reopen inactive traces.
-    If persisting abandoned spans fails, shutdown dependencies remain open and
-    only failed spans stay active for the next close attempt. Successfully
-    persisted abandoned spans are dispatched once and are not retried.
+    In strict mode, rejected abandoned spans remain retryable with dependencies
+    open. Best-effort shutdown dispatches accepted spans once and closes resources
+    even if persistence failed, returning a stable failure result and diagnostics.
     """
 
     def __init__(
@@ -201,6 +208,11 @@ class TraceRecorder:
         """Snapshot of lifetime loss counters; nonzero means an incomplete recording."""
         with self._condition:
             return dict(self._dropped)
+
+    @property
+    def is_closed(self) -> bool:
+        with self._condition:
+            return self._closed
 
     def _bounded_attributes(
         self, attributes: Attributes | None, *, count_loss: bool = True
@@ -286,7 +298,9 @@ class TraceRecorder:
                 if lifecycle_error is None and parent_correlation_id is not None:
                     active_parent = self._active.get(parent_correlation_id)
                     parent = (
-                        _context_from_span(active_parent.trace, active_parent.span)
+                        _context_from_span(
+                            active_parent.trace, active_parent.span, active_parent.persisted
+                        )
                         if active_parent is not None
                         else self._completed_contexts.get(parent_correlation_id)
                     )
@@ -335,6 +349,10 @@ class TraceRecorder:
                         trace_id, self._bounded_attributes(attributes)
                     ),
                     execution_lane=lane,
+                    resource_attributes={
+                        **self._resource_attributes,
+                        "service.name": self._service_name,
+                    },
                     links=tuple(
                         replace(
                             link,
@@ -355,16 +373,21 @@ class TraceRecorder:
                             "recording.orphan_parent": parent_correlation_id,
                         },
                     )
-            succeeded = self._store_start_span(trace, span) if self._store else True
+            succeeded = (
+                self._store_start_span(trace, span)
+                if self._store and (parent is None or parent.persisted)
+                else self._store is None
+            )
             if not succeeded:
-                if self._trace_counts[trace_id]["spans"] == 0:
+                if self._strict and self._trace_counts[trace_id]["spans"] == 0:
                     self._trace_counts.pop(trace_id, None)
                 if self._strict:
                     raise RecorderError("failed to start span")
-                return None
             with self._condition:
                 self._lanes.setdefault(lane.lane_id, lane)
-                self._active[correlation_id] = _ActiveSpan(correlation_id, trace, span, [])
+                self._active[correlation_id] = _ActiveSpan(
+                    correlation_id, trace, span, [], persisted=succeeded
+                )
                 self._counts["spans"] += 1
                 self._trace_counts[trace_id]["spans"] += 1
                 self._generation += 1
@@ -410,13 +433,13 @@ class TraceRecorder:
                 )
             succeeded = (
                 self._store_call("record event", self._store.record_event, event)
-                if self._store
+                if self._store and active.persisted
                 else True
             )
             if not succeeded:
                 if self._strict:
                     raise RecorderError("failed to record event")
-                return None
+                active.persisted = False
             with self._condition:
                 active.events.append(event)
                 self._counts["events"] += 1
@@ -480,13 +503,11 @@ class TraceRecorder:
                     metric = replace(metric, values=updated)
             succeeded = (
                 self._store_call("record metric", self._store.record_metric, metric)
-                if self._store
+                if self._store and active.persisted
                 else True
             )
-            if not succeeded:
-                if self._strict:
-                    raise RecorderError("failed to record metric")
-                return None
+            if not succeeded and self._strict:
+                raise RecorderError("failed to record metric")
             with self._condition:
                 if totals_key is not None and updated is not None:
                     self._metric_totals[totals_key] = updated
@@ -517,7 +538,7 @@ class TraceRecorder:
                 active = self._active.get(correlation_id)
             if active is None:
                 context = self._completed_contexts.get(correlation_id)
-                if context is not None and context.status is SpanStatus.ABANDONED:
+                if context is not None and not self._strict:
                     return None
                 return self._lifecycle_failure(
                     f"cannot end unknown or completed span: {correlation_id!r}"
@@ -539,16 +560,16 @@ class TraceRecorder:
                             )
             succeeded = (
                 self._store_call("complete span", self._store.complete_span, completed)
-                if self._store
+                if self._store and active.persisted
                 else True
             )
-            if not succeeded:
-                if self._strict:
-                    raise RecorderError("failed to complete span")
-                return None
+            if not succeeded and self._strict:
+                raise RecorderError("failed to complete span")
             with self._condition:
                 del self._active[correlation_id]
-                self._retain_completed_context(correlation_id, active.trace, completed)
+                self._retain_completed_context(
+                    correlation_id, active.trace, completed, active.persisted and succeeded
+                )
                 self._generation += 1
                 token = self._begin_processor_call()
                 self._release_trace_if_inactive(completed.trace_id)
@@ -599,13 +620,19 @@ class TraceRecorder:
             completed = []
             for active in expired:
                 span = self._complete(active, SpanStatus.ABANDONED, "span expired", None)
-                if self._store and not self._store_call(
-                    "expire span", self._store.complete_span, span
+                if (
+                    self._store
+                    and active.persisted
+                    and not self._store_call("expire span", self._store.complete_span, span)
                 ):
-                    continue
+                    if self._strict:
+                        continue
+                    active.persisted = False
                 with self._condition:
                     del self._active[active.correlation_id]
-                    self._retain_completed_context(active.correlation_id, active.trace, span)
+                    self._retain_completed_context(
+                        active.correlation_id, active.trace, span, active.persisted
+                    )
                     self._release_trace_if_inactive(span.trace_id)
                     self._dropped["expired_spans"] += 1
                     self._generation += 1
@@ -733,11 +760,11 @@ class TraceRecorder:
                 span = self._complete(item, SpanStatus.ABANDONED, "recorder closed", None)
                 store_ok = (
                     self._store_call("complete span", self._store.complete_span, span)
-                    if self._store
+                    if self._store and item.persisted
                     else True
                 )
                 succeeded = store_ok and succeeded
-                if store_ok:
+                if store_ok or not self._strict:
                     completed.append(span)
                     completed_correlations.append(item.correlation_id)
             with self._condition:
@@ -762,11 +789,13 @@ class TraceRecorder:
                     processors_ok = self._dispatch_processors(span) and processors_ok
                 except RecorderError:
                     processors_ok = False
-            if not stores_ok:
+            if not stores_ok and self._strict:
                 if self._strict:
                     raise _RetryableCloseError("failed to persist abandoned spans")
                 return False, True
-            flush_ok = self._flush_store(deadline) and self._flush_processors(deadline)
+            store_flush_ok = self._flush_store(deadline)
+            processors_flush_ok = self._flush_processors(deadline)
+            flush_ok = store_flush_ok and processors_flush_ok
             shutdown_ok = self._shutdown_dependencies(deadline)
         finally:
             self._flush_lock.release()
@@ -808,6 +837,7 @@ class TraceRecorder:
         deadline: float | None = None,
         *,
         allow_during_closing: bool = False,
+        bounded_lifecycle: bool = False,
     ) -> _Result:
         operation = _Operation(cast(Callable[[], object], callback))
         with self._condition:
@@ -815,6 +845,10 @@ class TraceRecorder:
                 raise _ClosingError
             if self._dispatching and self._dispatcher_thread_id == threading.get_ident():
                 raise RecorderError("a store callback must not re-enter its recorder")
+            if bounded_lifecycle and len(self._operations) >= self._limits.max_pending_operations:
+                self._dropped.setdefault("pending_operations", 0)
+                self._dropped["pending_operations"] += 1
+                raise _AdmissionError("pending lifecycle admission budget exhausted")
             self._operations.append(operation)
             while not operation.done:
                 if not self._dispatching and self._operations:
@@ -852,9 +886,13 @@ class TraceRecorder:
         operation: str,
     ) -> _Result | None:
         try:
-            return self._ordered(callback)
+            return self._ordered(callback, bounded_lifecycle=True)
         except _ClosingError:
             return self._lifecycle_failure(f"cannot {operation} after recorder close has begun")
+        except _AdmissionError:
+            if self._strict:
+                raise
+            return None
 
     def _resolve_lane(
         self,
@@ -926,8 +964,10 @@ class TraceRecorder:
             key: totals for key, totals in self._metric_totals.items() if key[0] != trace_id
         }
 
-    def _retain_completed_context(self, correlation_id: str, trace: Trace, span: Span) -> None:
-        self._completed_contexts[correlation_id] = _context_from_span(trace, span)
+    def _retain_completed_context(
+        self, correlation_id: str, trace: Trace, span: Span, persisted: bool = True
+    ) -> None:
+        self._completed_contexts[correlation_id] = _context_from_span(trace, span, persisted)
         while len(self._completed_contexts) > self._completed_context_cache_size:
             self._completed_contexts.popitem(last=False)
 
@@ -1153,8 +1193,8 @@ def _validate_correlation_id(value: str, field_name: str = "correlation_id") -> 
         raise ValueError(f"{field_name} must be at most 256 characters")
 
 
-def _context_from_span(trace: Trace, span: Span) -> _SpanContext:
-    return _SpanContext(trace, span.span_id, span.execution_lane, span.status)
+def _context_from_span(trace: Trace, span: Span, persisted: bool = True) -> _SpanContext:
+    return _SpanContext(trace, span.span_id, span.execution_lane, span.status, persisted)
 
 
 def _validate_nonempty_string(value: str, field_name: str) -> None:
