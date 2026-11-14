@@ -148,6 +148,52 @@ def aggregate_turn_metrics(turns: tuple[EvalMetrics, ...]) -> EvalMetrics:
             completeness=MetricCompleteness.PARTIAL,
             detail="process-wide sample maximum across turns; not per-agent memory",
         )
+
+    for name in sorted(
+        {
+            metric_name
+            for metrics in turns
+            for metric_name in metrics
+            if metric_name.startswith("process.") and metric_name != "process.rss_bytes"
+        }
+    ):
+        present = [metrics.get(name) for metrics in turns]
+        available = [metric for metric in present if metric is not None]
+        if not available:
+            continue
+        usable = [
+            metric
+            for metric in available
+            if metric.value is not None and metric.completeness is not MetricCompleteness.MISSING
+        ]
+        template = available[0]
+        if not usable:
+            result[name] = replace(
+                template,
+                value=None,
+                scope=MetricScope.PROCESS,
+                completeness=MetricCompleteness.MISSING,
+                detail="all turns reported missing evidence",
+            )
+            continue
+        total = sum(metric.value for metric in usable if metric.value is not None)
+        complete = len(usable) == len(turns) and all(
+            metric.completeness is MetricCompleteness.COMPLETE for metric in usable
+        )
+        result[name] = replace(
+            template,
+            value=total,
+            scope=MetricScope.PROCESS,
+            completeness=(MetricCompleteness.COMPLETE if complete else MetricCompleteness.PARTIAL),
+            detail=(
+                None
+                if complete
+                else (
+                    f"{len(usable)} of {len(turns)} turn(s) contributed; "
+                    "process-wide samples, not per-agent attribution"
+                )
+            ),
+        )
     return EvalMetrics(result)
 
 

@@ -19,9 +19,10 @@ EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
 
 @pytest.fixture
-def demo() -> Any:
+def demo(monkeypatch: pytest.MonkeyPatch) -> Any:
     import runpy
 
+    monkeypatch.syspath_prepend(str(EXAMPLES))
     namespace = runpy.run_path(str(EXAMPLES / "eval_demo.py"))
     return namespace
 
@@ -74,3 +75,22 @@ def test_demo_gate_rejects_regression(demo: Any) -> None:
     )
     assert not reversed_comparison.passed
     assert "efficient-fetch" in reversed_comparison.regressed_case_ids
+
+
+def test_demo_report_shows_tradeoff_and_missing_evidence(demo: Any, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from langgraph_instrumentation import render_report
+
+    build_baseline, build_optimized = _builders(demo)
+    golden = load_cases(EXAMPLES / "eval_demo_cases_v2.json")
+    baseline_run = EvalRunner(LangGraphEvalAdapter(build_baseline())).run(golden)
+    optimized_run = EvalRunner(LangGraphEvalAdapter(build_optimized())).run(golden)
+    comparison = compare_runs(
+        baseline_run, optimized_run, rules=(MetricRule("tokens.total"),)
+    )
+    document = render_report(optimized_run, comparison=comparison)
+    assert "efficient-fetch" in document
+    assert "tokens.total" in document
+    assert "missing" in document
+    report = tmp_path / "report.html"
+    report.write_text(document, encoding="utf-8")
+    assert report.stat().st_size > 0
