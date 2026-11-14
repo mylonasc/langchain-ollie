@@ -9,7 +9,68 @@ overlapping durations must not be summed as CPU time or advertised as a proven
 critical path. No automatic cross-process tracing, host tool sandbox, background
 export service or full distributed-context propagation is installed.
 
-## Install and run
+## Quickstart: trace a LangGraph agent
+
+From a checkout of this repository, install dependencies (Python 3.12–3.14):
+
+```bash
+uv sync --group dev --group agents
+```
+
+Save this as `quickstart.py`. It builds a minimal LangGraph chat agent with a
+scripted chat model, so you can try tracing without API keys or network calls:
+
+```python
+from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from langgraph.graph import END, START, MessagesState, StateGraph
+
+from langgraph_instrumentation import RecordingSession
+
+model = FakeListChatModel(responses=["Hello! I am a traced LangGraph agent."])
+
+
+def respond(state: MessagesState):
+    return {"messages": [model.invoke(state["messages"])]}
+
+
+graph = StateGraph(MessagesState)
+graph.add_node("respond", respond)
+graph.add_edge(START, "respond")
+graph.add_edge("respond", END)
+agent = graph.compile()
+
+with RecordingSession() as recording:
+    result = agent.invoke(
+        {"messages": [("user", "Hello!")]},
+        config={"callbacks": [recording.handler]},
+    )
+
+recording.export("trace.json")
+print(result["messages"][-1].content)
+```
+
+Run it and inspect the trace:
+
+```bash
+uv run --no-sync python quickstart.py
+```
+
+1. Open [ui.perfetto.dev](https://ui.perfetto.dev) and choose **Open trace file**.
+2. Select the generated `trace.json`.
+3. Expand the timeline tracks and zoom into the graph invocation. You should see
+   the graph, the `respond` node, and its chat-model call as nested operations.
+4. Click a slice to inspect its duration and recorded attributes in the details
+   panel. Use these timings to see where your agent spends elapsed time.
+
+These are **execution traces**, not captured console logs. Prompt/response bodies
+are not recorded by default. For private or air-gapped inspection, use the
+[offline Perfetto UI](https://perfetto.dev/docs/visualization/offline).
+
+For an existing LangGraph agent, the integration is just the `RecordingSession`
+scope, `config={"callbacks": [recording.handler]}` on invocation, and
+`recording.export(...)` afterward. Your agent and model construction stay unchanged.
+
+## More runnable examples
 
 Python 3.12–3.14, standard GIL-enabled CPython:
 
