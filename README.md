@@ -380,8 +380,10 @@ sampler thread or psutil import occurs on default library import. Use
 `with ProcessSampler(recording.recorder, interval=0.1, max_samples=600): ...` inside
 the recording scope. A separate **process** trace contains CPU seconds, RSS bytes,
 CPU percent (one logical core = 100%, potentially over 100%), read overhead and
-missing/dropped counts. Units/PID remain in metric metadata. Counters describe
-the entire current process, never an individual overlapping agent or subprocess.
+missing/dropped counts. Units/PID remain in metric metadata. CPU percent requires
+at least two samples; the runnable example takes an explicit baseline and final
+sample so short agents still show a delta. Counters describe the entire current
+process, never an individual overlapping agent or subprocess.
 The sampler has no extra sample buffer, stops at its attempt cap, shares recorder
 budgets, and must close before the recording. Source calls must return promptly;
 a timed-out close cannot forcibly interrupt a native/custom source call.

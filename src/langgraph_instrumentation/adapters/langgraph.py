@@ -154,7 +154,9 @@ class LangGraphCallbackHandler(BaseCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         framework_metadata = metadata or {}
-        kind, name = self._chain_identity(serialized, framework_metadata, parent_run_id, kwargs)
+        kind, name = self._chain_identity(
+            serialized, framework_metadata, parent_run_id, kwargs, tags
+        )
         attributes = self._start_attributes(run_id, parent_run_id, framework_metadata)
         attributes["input"] = self._project_payload(inputs)
         self._start(run_id, parent_run_id, name, kind, attributes, framework_metadata)
@@ -453,20 +455,54 @@ class LangGraphCallbackHandler(BaseCallbackHandler):
         metadata: Mapping[str, object],
         parent_run_id: UUID | None,
         kwargs: Mapping[str, object],
+        tags: Sequence[object] | None,
     ) -> tuple[SpanKind, str]:
         node = metadata.get("langgraph_node")
-        if node is not None:
+        if node is not None and self._is_node_execution(node, kwargs.get("name"), serialized, tags):
             return SpanKind.NODE, self._label("Node", self._safe_text(node, "node"))
+        integration = metadata.get("ls_integration")
+        agent_name = self._safe_optional_text(metadata.get("lc_agent_name"))
+        if integration == "langchain_create_agent" and agent_name is not None:
+            # Nested Deep Agents subagents are compiled agent graphs. Their chain
+            # callback inherits the enclosing tools node's langgraph_node metadata.
+            return SpanKind.GRAPH, self._label("Graph", agent_name)
         supplied_name = kwargs.get("name")
         graph_name = self._safe_optional_text(metadata.get("graph_name"))
         if graph_name is None:
             graph_name = self._safe_optional_text(supplied_name)
-        if metadata.get("ls_integration") in ("langgraph", "deepagents") and parent_run_id is None:
+        if (
+            integration in ("langgraph", "deepagents", "langchain_create_agent")
+            and parent_run_id is None
+        ):
             return SpanKind.GRAPH, self._label("Graph", graph_name or "LangGraph")
         name = self._safe_optional_text(supplied_name) or self._serialized_name(serialized, "chain")
         if metadata.get("graph_name") is not None:
             return SpanKind.GRAPH, self._label("Graph", graph_name or "LangGraph")
         return SpanKind.CHAIN, name
+
+    def _is_node_execution(
+        self,
+        node: object,
+        supplied_name: object,
+        serialized: Mapping[str, object] | None,
+        tags: Sequence[object] | None,
+    ) -> bool:
+        """Distinguish a node callback from a nested runnable in that node.
+
+        LangGraph propagates ``langgraph_node`` metadata to nested chains. Only
+        the node-level callback carries a ``graph:step:*`` tag. For frameworks
+        that omit tags, fall back to the node name matching the callback name.
+        """
+        if tags and any(isinstance(tag, str) and tag.startswith("graph:step:") for tag in tags):
+            return True
+        node_name = self._safe_optional_text(node)
+        if node_name is None:
+            # Preserve the safe fallback for unsupported/hostile node metadata.
+            return True
+        callback_name = self._safe_optional_text(supplied_name)
+        if callback_name is None:
+            callback_name = self._safe_optional_text(self._serialized_name(serialized, "chain"))
+        return node_name is not None and callback_name == node_name
 
     def _serialized_name(self, serialized: Mapping[str, object] | None, fallback: str) -> str:
         if serialized:

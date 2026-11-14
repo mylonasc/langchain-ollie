@@ -68,7 +68,8 @@ def test_chain_callbacks_normalize_graph_node_ids_metadata_and_payloads() -> Non
         run_id=node_id,
         parent_run_id=root_id,
         metadata={"langgraph_node": "plan", "langgraph_step": 1},
-        name="ignored",
+        tags=["graph:step:1"],
+        name="plan",
     )
 
     root = recorder.calls[0]
@@ -91,6 +92,61 @@ def test_chain_callbacks_normalize_graph_node_ids_metadata_and_payloads() -> Non
         "langgraph.metadata": {"langgraph_node": "plan", "langgraph_step": 1},
         "input": {"value": 2},
     }
+
+
+def test_nested_chain_inheriting_node_metadata_is_not_a_node() -> None:
+    recorder = FakeRecorder()
+    handler = LangGraphCallbackHandler(recorder)
+    node_id = UUID(int=10)
+    routing_id = UUID(int=11)
+    handler.on_chain_start(
+        {},
+        {},
+        run_id=node_id,
+        metadata={"langgraph_node": "model", "ls_integration": "langgraph"},
+        tags=["graph:step:1"],
+        name="model",
+    )
+    handler.on_chain_start(
+        {},
+        {},
+        run_id=routing_id,
+        parent_run_id=node_id,
+        metadata={"langgraph_node": "model", "ls_integration": "langgraph"},
+        tags=["seq:step:2"],
+        name="tools_condition",
+    )
+    routing = recorder.calls[1]
+    assert routing[1] == (str(routing_id), "tools_condition", SpanKind.CHAIN)
+    assert routing[2]["parent_correlation_id"] == str(node_id)
+    assert routing[2]["lane_id"] is None
+
+
+def test_nested_create_agent_subagent_is_a_graph_not_its_tools_node() -> None:
+    recorder = FakeRecorder()
+    handler = LangGraphCallbackHandler(recorder)
+    task_id = UUID(int=20)
+    worker_id = UUID(int=21)
+    handler.on_tool_start(
+        {"name": "task"}, "{}", run_id=task_id, inputs={"subagent_type": "worker"}
+    )
+    handler.on_chain_start(
+        {},
+        {},
+        run_id=worker_id,
+        parent_run_id=task_id,
+        metadata={
+            "langgraph_node": "tools",
+            "ls_integration": "langchain_create_agent",
+            "lc_agent_name": "general-purpose",
+        },
+        tags=[],
+        name="general-purpose",
+    )
+    subagent = recorder.calls[1]
+    assert subagent[1] == (str(worker_id), "Graph: general-purpose", SpanKind.GRAPH)
+    assert subagent[2]["parent_correlation_id"] == str(task_id)
+    assert subagent[2]["lane_id"] is None
 
 
 def test_model_tool_usage_streaming_and_cancellation_translation() -> None:
