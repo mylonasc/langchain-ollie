@@ -305,6 +305,28 @@ are not claimed by this matrix. See [release/upgrade notes](CHANGELOG.md),
 
 ## Roadmap and alternatives
 
+### Optional process resource counters
+
+Install `pip install 'langgraph-instrumentation[resources]'` or
+`uv sync --group dev --group agents --group resources`, then run:
+
+```bash
+uv run --no-sync python examples/local_resources.py resources.json
+```
+
+`from langgraph_instrumentation.resources import ProcessSampler` is opt-in; no
+sampler thread or psutil import occurs on default library import. Use
+`with ProcessSampler(recording.recorder, interval=0.1, max_samples=600): ...` inside
+the recording scope. A separate **process** trace contains CPU seconds, RSS bytes,
+CPU percent (one logical core = 100%, potentially over 100%), read overhead and
+missing/dropped counts. Units/PID remain in metric metadata. Counters describe
+the entire current process, never an individual overlapping agent or subprocess.
+The sampler has no extra sample buffer, stops at its attempt cap, shares recorder
+budgets, and must close before the recording. Source calls must return promptly;
+a timed-out close cannot forcibly interrupt a native/custom source call.
+
+For the complete development suite, include `--group resources` in the sync command.
+
 See [`EPIC_REFACTOR.md`](EPIC_REFACTOR.md) and [epic #13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 Local SQLite, explicit graph links, bounded recording and modern agent e2e are
 implemented. CPU/RSS counters, profiler correlation, and

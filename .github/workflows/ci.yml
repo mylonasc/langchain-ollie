@@ -27,7 +27,7 @@ jobs:
       - name: Resolve current supported versions
         if: matrix.dependencies == 'current'
         run: uv lock --upgrade
-      - run: uv sync --locked --group dev --group agents
+      - run: uv sync --locked --group dev --group agents --group resources
       - name: Pin minimum supported framework versions
         if: matrix.dependencies == 'minimum'
         run: uv pip install 'langchain-core==1.8.0' 'langgraph==1.2.21' 'deepagents==0.7.38'
@@ -60,7 +60,7 @@ jobs:
         with:
           version: '0.12.21'
           python-version: '3.12'
-      - run: uv sync --locked --group dev --group agents
+      - run: uv sync --locked --group dev --group agents --group resources
       - name: Provision pinned and checksum-verified importer
         run: uv run --no-sync python scripts/install_perfetto.py /tmp/trace_processor_shell
       - name: Real agent artifacts and importer SQL assertions

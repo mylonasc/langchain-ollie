@@ -153,6 +153,17 @@ class PerfettoExporter:
                 "monotonic_origin_ns": origin,
                 "clock_domain": next(iter(domains), None),
                 "resources": [b.trace.to_dict() for b in ordered],
+                "metric_metadata": [
+                    {
+                        "trace_id": str(m.trace_id),
+                        "name": m.name,
+                        "time_monotonic_ns": m.time_monotonic_ns,
+                        "attributes": attributes_to_dict(m.attributes),
+                    }
+                    for b in ordered
+                    for m in b.metrics
+                    if m.attributes
+                ],
                 "loss": loss,
                 "incomplete": any(loss.values())
                 or any(not s.is_finished or s.status is SpanStatus.ABANDONED for s in spans),

@@ -218,6 +218,14 @@ stable and may become child issues later; this parent initially tracks the slice
   REF-07's current-toolchain annotation warning is fixed. M4/core acceptance is met;
   this is not a package publication or merge authorization.
 
+- REF-09: [#22](https://github.com/mylonasc/langgraph_instrumentation/issues/22).
+  Opt-in psutil extra and bounded ProcessSampler add process-scope CPU/RSS counters,
+  explicit one-core normalization, units/PID, overhead and missing/drop diagnostics.
+  No default sampler import/thread/dependency loading. Deterministic sources,
+  permission failures, admission drops, real subprocess work, cleanup and imported
+  counter tracks pass. Local overhead: 48.8 µs median/sample (REF09_RESOURCES.md).
+  Verification: 240 default tests, 12 importer tests, lint/format/types/build.
+
 ### Useful-state checkpoints
 
 - **M1 / REF-02:** install, run a no-network modern LangGraph agent, open a safe
@@ -554,7 +562,7 @@ Test infrastructure rules:
 - [x] REF-06 — Failure isolation and lifecycle (M3 with REF-05, #19)
 - [x] REF-07 — SQLite durability and reopen (#20)
 - [x] REF-08 — Local-first release (M4; core epic complete, #21)
-- [ ] REF-09 — Optional CPU/RSS sampling
+- [x] REF-09 — Optional CPU/RSS sampling (#22)
 - [ ] REF-10 — Optional sampling-profiler interoperability / go-no-go
 - [ ] REF-11 — Optional OpenTelemetry bridge
 

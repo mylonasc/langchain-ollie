@@ -27,6 +27,7 @@ Issues = "https://github.com/mylonasc/langgraph_instrumentation/issues"
 Changelog = "https://github.com/mylonasc/langgraph_instrumentation/blob/epic-refactor/CHANGELOG.md"
 
 [project.optional-dependencies]
+resources = ["psutil>=7.0,<9"]
 examples = [
     "langgraph>=1.2.21,<1.3",
 ]
@@ -43,6 +44,7 @@ dev = [
 agents = [
     "deepagents>=0.7.38,<0.8",
 ]
+resources = ["psutil>=7.0,<9"]
 
 # Keep this repository self-contained even when cloned below another uv workspace.
 [tool.uv.workspace]
