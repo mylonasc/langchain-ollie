@@ -27,7 +27,7 @@ jobs:
       - name: Resolve current supported versions
         if: matrix.dependencies == 'current'
         run: uv lock --upgrade
-      - run: uv sync --locked --group dev --group agents --group resources
+      - run: uv sync --locked --group dev --group agents --group resources --group otel
       - name: Pin minimum supported framework versions
         if: matrix.dependencies == 'minimum'
         run: uv pip install 'langchain-core==1.8.0' 'langgraph==1.2.21' 'deepagents==0.7.38'
@@ -67,3 +67,18 @@ jobs:
         env:
           PERFETTO_TRACE_PROCESSOR: /tmp/trace_processor_shell
         run: uv run --no-sync pytest -m perfetto
+  otel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.21'
+          python-version: '3.12'
+      - run: uv sync --locked --group dev --group agents --group resources --group otel
+      - name: Required SDK dependency preflight
+        run: uv run --no-sync python -c 'import opentelemetry.sdk; import opentelemetry.exporter.otlp.proto.http.trace_exporter'
+      - name: SDK and isolated loopback collector tests
+        run: uv run --no-sync pytest -m otel
+      - run: uv run --no-sync python examples/local_otel.py /tmp/otel-local.json

@@ -11,3 +11,9 @@ and real-agent artifacts imported by the pinned Perfetto Trace Processor. The
 default unit suite must not download tools. Required artifact CI provisions the
 binary explicitly before tests. Causal links require explicit evidence and remain
 distinct from containment. Do not infer dependencies from names or timing.
+
+The optional `otel` module is imported explicitly, never by `exporters.__init__`.
+Use SDK batching/exporters; do not build a parallel transport/retry engine. This
+bridge is export-only per ADR-002, not a global provider/propagator or a claimed
+GenAI/OpenInference mapping. Required `pytest -m otel` uses an isolated loopback
+receiver, not external credentials or collectors. Keep it out of default tests.

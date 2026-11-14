@@ -7,6 +7,9 @@
 - Deterministic atomic Perfetto export and transactional SQLite v1 with read-only
   inspection/export CLI and explicit stopped-writer crash recovery.
 - Real offline agent coverage on standard CPython 3.12–3.14.
+- Optional process-wide CPU/RSS counters and SDK-backed export-only OTel bridge.
+  The profiler compatibility spike ended in an evidenced no-go for automatic
+  py-spy/Speedscope timeline correlation; see ADR-001.
 
 ### Upgrade from the prototype
 

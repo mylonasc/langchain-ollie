@@ -275,7 +275,7 @@ wrappers, logging-handler side effects, or hash-derived Python thread tracks.
 ## Development and artifact verification
 
 ```bash
-uv sync --group dev --group agents
+uv sync --group dev --group agents --group resources --group otel
 uv run --no-sync pytest
 uv run --no-sync ruff check .
 uv run --no-sync ruff format --check .
@@ -325,12 +325,38 @@ The sampler has no extra sample buffer, stops at its attempt cap, shares recorde
 budgets, and must close before the recording. Source calls must return promptly;
 a timed-out close cannot forcibly interrupt a native/custom source call.
 
-For the complete development suite, include `--group resources` in the sync command.
+### Optional OpenTelemetry export-only bridge
+
+Install `pip install 'langgraph-instrumentation[otel]'`. The no-network SDK demo:
+
+```bash
+uv sync --group dev --group agents --group resources --group otel
+uv run --no-sync python examples/local_otel.py otel-local.json
+uv run --no-sync pytest -m otel
+```
+
+Use `OpenTelemetryProcessor(exporter)` from
+`langgraph_instrumentation.exporters.otel` in `RecordingSession(processors=[...])`.
+Supply an explicit trusted SDK SpanExporter (for example OTLP/HTTP with a chosen
+endpoint); the bridge owns it. Default batching uses the SDK's bounded queue.
+No SDK import, global provider, exporter environment configuration, or network
+destination is installed by the local path. SDK exporter transports own retries.
+
+This is **export-only**, not full context interoperability: canonical local IDs,
+parents, links/resources and Unix timing survive, but incoming remote context,
+flags/tracestate, SDK sampling and outgoing/manual-child propagation do not.
+Converted spans are sampled INTERNAL spans; richer kinds/statuses stay namespaced.
+No GenAI/OpenInference semantic compliance or metric export is claimed. Read
+[ADR-002](docs/adr/002-otel-export-only.md) for mapping and lifecycle/loss limits.
+`force_flush(seconds)` is bounded by SDK policy; shutdown bounds the caller's wait
+but cannot kill an uncooperative foreign exporter. A destination failure does not
+erase local Perfetto records. The optional suite uses only an isolated loopback
+OTLP receiver, never an external service; the default suite excludes it.
 
 See [`EPIC_REFACTOR.md`](EPIC_REFACTOR.md) and [epic #13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 Local SQLite, explicit graph links, bounded recording and modern agent e2e are
-implemented. CPU/RSS counters, profiler correlation, and
-OpenTelemetry monitoring are lower-priority opt-in follow-ups, not core requirements.
+implemented. Process CPU/RSS and SDK export-only OTel are optional extras; full
+distributed propagation and automatic stack timeline correlation are not provided.
 
 Profiler spike outcome: [ADR-001](docs/adr/001-profiler-correlation.md) is a no-go
 for automatic py-spy Speedscope-to-Perfetto alignment: its sample-count timeline

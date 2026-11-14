@@ -62,15 +62,15 @@ Tests must not depend on:
 
 ## Scoped Agent Guides
 
-Create scoped `AGENT.md` files with the directory they govern:
+Maintain scoped `AGENT.md` files with the directory they govern:
 
-- `src/langgraph_instrumentation/adapters/AGENT.md` in REF-01
-- `src/langgraph_instrumentation/stores/AGENT.md` in REF-01
-- `src/langgraph_instrumentation/exporters/AGENT.md` in REF-02
+- `src/langgraph_instrumentation/adapters/AGENT.md`
+- `src/langgraph_instrumentation/stores/AGENT.md`
+- `src/langgraph_instrumentation/exporters/AGENT.md`
 
 The nearest guide supplements this file and should document local protocols,
 forbidden dependencies, and the contract or fixture suite that implementations
-must pass. REF-08 must review all guides against the final architecture.
+must pass. Release-gate changes must review all guides against the architecture.
 
 ## Pull Requests
 

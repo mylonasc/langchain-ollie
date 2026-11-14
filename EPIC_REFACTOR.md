@@ -2,7 +2,8 @@
 
 ## Status and scope
 
-- Status: core REF-01 through REF-08 complete on `epic-refactor`; optional slices follow.
+- Status: REF-01 through REF-11 complete on `epic-refactor` (REF-10 is an evidenced
+  no-go, not a profiler implementation). Final extended hosted matrix pending.
 - Parent issue: [#13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 - Primary outcome: safe, bounded, offline LangGraph and Deep Agents execution
   traces that can be inspected in Perfetto without a service or credentials.
@@ -234,6 +235,20 @@ stable and may become child issues later; this parent initially tracks the slice
   platform/privacy/permission limits, external opt-in commands and revisit criteria.
   No process inspection or elevated permissions were used; live-profiler overhead
   is explicitly unmeasured, not advertised. No fragile fallback engine added.
+
+- REF-11: [#24](https://github.com/mylonasc/langgraph_instrumentation/issues/24).
+  ADR-002 chooses an explicit export-only neutral consumer over an SDK callback
+  adapter. Optional SDK conversion preserves IDs/parents/links/resources/events
+  and timing, retaining local kind/status metadata without claiming unsupported
+  distributed context or GenAI/OpenInference conventions. SDK batching/OTLP handle
+  delivery; shared flush/shutdown workers bound caller waits even when SDK 1.45.2
+  ignores its flush timeout. Rejections now increment recorder failure diagnostics
+  as well as returning false. SDK failure/isolation/timeout/context tests and real
+  offline-agent OTLP/protobuf transport to an isolated loopback collector pass.
+  Verification: 242 default tests, 12 Perfetto tests, seven optional OTel tests,
+  lint/format/types/build and no-network SDK demo. Optional tests have a required
+  dedicated CI job and are excluded from the default core suite. REF-09/10 hosted
+  CI also passed: actions/runs/43580038439 and actions/runs/43580262117.
 
 ### Useful-state checkpoints
 
@@ -573,7 +588,7 @@ Test infrastructure rules:
 - [x] REF-08 — Local-first release (M4; core epic complete, #21)
 - [x] REF-09 — Optional CPU/RSS sampling (#22)
 - [x] REF-10 — Optional sampling-profiler interoperability / go-no-go (#23; no-go ADR)
-- [ ] REF-11 — Optional OpenTelemetry bridge
+- [x] REF-11 — Optional OpenTelemetry export-only bridge (#24)
 
 Every implementation PR names its REF ID, links this parent, lists prerequisites,
 and supplies acceptance evidence and runnable verification commands. Run configured

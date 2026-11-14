@@ -1091,7 +1091,10 @@ class TraceRecorder:
     ) -> bool:
         remaining = _remaining(deadline)
         try:
-            return callback(remaining)
+            succeeded = callback(remaining)
+            if not succeeded:
+                self._destination_failure(operation)
+            return succeeded
         except Exception:
             self._destination_failure(operation)
             return False
@@ -1103,7 +1106,10 @@ class TraceRecorder:
         deadline: float | None,
     ) -> bool:
         try:
-            return self._invoke_processor(callback, _remaining(deadline))
+            succeeded = self._invoke_processor(callback, _remaining(deadline))
+            if not succeeded:
+                self._destination_failure(operation)
+            return succeeded
         except Exception:
             self._destination_failure(operation)
             return False
