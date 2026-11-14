@@ -7,7 +7,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from types import MappingProxyType
-from typing import cast
 
 from ..models import JSONValue, attributes_to_dict, freeze_attributes
 from .models import (
@@ -96,22 +95,19 @@ class CaseAggregate:
         return self.passed_trials / self.trial_count if self.trial_count else 0.0
 
     def to_dict(self) -> dict[str, JSONValue]:
-        return cast(
-            dict[str, JSONValue],
-            {
-                "case_id": self.case_id,
-                "trial_count": self.trial_count,
-                "passed_trials": self.passed_trials,
-                "execution_failures": self.execution_failures,
-                "assessment_errors": self.assessment_errors,
-                "passed": self.passed,
-                "pass_rate": self.pass_rate,
-                "metrics": self.metrics.to_dict(),
-                "trial_indices": list(self.trial_indices),
-                "execution_statuses": dict(self.execution_statuses),
-                "missing_metric_names": list(self.missing_metric_names),
-            },
-        )
+        return {
+            "case_id": self.case_id,
+            "trial_count": self.trial_count,
+            "passed_trials": self.passed_trials,
+            "execution_failures": self.execution_failures,
+            "assessment_errors": self.assessment_errors,
+            "passed": self.passed,
+            "pass_rate": self.pass_rate,
+            "metrics": self.metrics.to_dict(),
+            "trial_indices": list(self.trial_indices),
+            "execution_statuses": attributes_to_dict(self.execution_statuses),
+            "missing_metric_names": list(self.missing_metric_names),
+        }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> CaseAggregate:
@@ -185,18 +181,15 @@ class RunAggregate:
         return None
 
     def to_dict(self) -> dict[str, JSONValue]:
-        return cast(
-            dict[str, JSONValue],
-            {
-                "schema_version": self.schema_version,
-                "kind": _AGGREGATE_KIND,
-                "run_id": self.run_id,
-                "trial_aggregation": self.trial_aggregation.value,
-                "metric_aggregation": self.metric_aggregation.value,
-                "metadata": attributes_to_dict(self.metadata),
-                "cases": [case.to_dict() for case in self.cases],
-            },
-        )
+        return {
+            "schema_version": self.schema_version,
+            "kind": _AGGREGATE_KIND,
+            "run_id": self.run_id,
+            "trial_aggregation": self.trial_aggregation.value,
+            "metric_aggregation": self.metric_aggregation.value,
+            "metadata": attributes_to_dict(self.metadata),
+            "cases": [case.to_dict() for case in self.cases],
+        }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> RunAggregate:

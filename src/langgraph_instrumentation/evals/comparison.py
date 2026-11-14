@@ -7,7 +7,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
-from typing import cast
 
 from ..models import JSONValue, attributes_to_dict, freeze_attributes
 from .aggregation import (
@@ -113,20 +112,17 @@ class MetricComparison:
                 raise TypeError(f"{name} must be EvalMetric or null")
 
     def to_dict(self) -> dict[str, JSONValue]:
-        return cast(
-            dict[str, JSONValue],
-            {
-                "metric": self.metric,
-                "kind": self.kind.value,
-                "direction": self.direction.value,
-                "baseline": self.baseline.to_dict() if self.baseline else None,
-                "candidate": self.candidate.to_dict() if self.candidate else None,
-                "delta": self.delta,
-                "relative_delta": self.relative_delta,
-                "tolerance": self.tolerance,
-                "reason": self.reason,
-            },
-        )
+        return {
+            "metric": self.metric,
+            "kind": self.kind.value,
+            "direction": self.direction.value,
+            "baseline": self.baseline.to_dict() if self.baseline else None,
+            "candidate": self.candidate.to_dict() if self.candidate else None,
+            "delta": self.delta,
+            "relative_delta": self.relative_delta,
+            "tolerance": self.tolerance,
+            "reason": self.reason,
+        }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> MetricComparison:
@@ -210,30 +206,27 @@ class CaseComparison:
         return self.kind in (ComparisonKind.IMPROVED, ComparisonKind.UNCHANGED)
 
     def to_dict(self) -> dict[str, JSONValue]:
-        return cast(
-            dict[str, JSONValue],
-            {
-                "case_id": self.case_id,
-                "kind": self.kind.value,
-                "quality": self.quality.value,
-                "metrics": [metric.to_dict() for metric in self.metrics],
-                "reasons": list(self.reasons),
-                "baseline_passed": self.baseline_passed,
-                "candidate_passed": self.candidate_passed,
-                "baseline_status": (
-                    None if self.baseline_status is None else self.baseline_status.value
-                ),
-                "candidate_status": (
-                    None if self.candidate_status is None else self.candidate_status.value
-                ),
-                "baseline_trials": self.baseline_trials,
-                "candidate_trials": self.candidate_trials,
-                "baseline_execution_failures": self.baseline_execution_failures,
-                "candidate_execution_failures": self.candidate_execution_failures,
-                "baseline_assessment_errors": self.baseline_assessment_errors,
-                "candidate_assessment_errors": self.candidate_assessment_errors,
-            },
-        )
+        return {
+            "case_id": self.case_id,
+            "kind": self.kind.value,
+            "quality": self.quality.value,
+            "metrics": [metric.to_dict() for metric in self.metrics],
+            "reasons": list(self.reasons),
+            "baseline_passed": self.baseline_passed,
+            "candidate_passed": self.candidate_passed,
+            "baseline_status": (
+                None if self.baseline_status is None else self.baseline_status.value
+            ),
+            "candidate_status": (
+                None if self.candidate_status is None else self.candidate_status.value
+            ),
+            "baseline_trials": self.baseline_trials,
+            "candidate_trials": self.candidate_trials,
+            "baseline_execution_failures": self.baseline_execution_failures,
+            "candidate_execution_failures": self.candidate_execution_failures,
+            "baseline_assessment_errors": self.baseline_assessment_errors,
+            "candidate_assessment_errors": self.candidate_assessment_errors,
+        }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> CaseComparison:
@@ -358,29 +351,24 @@ class ComparisonSummary:
         return None
 
     def to_dict(self) -> dict[str, JSONValue]:
-        return cast(
-            dict[str, JSONValue],
-            {
-                "schema_version": self.schema_version,
-                "kind": _COMPARISON_KIND,
-                "baseline_run_id": self.baseline_run_id,
-                "candidate_run_id": self.candidate_run_id,
-                "trial_aggregation": self.trial_aggregation.value,
-                "metric_aggregation": self.metric_aggregation.value,
-                "require_same_cases": self.require_same_cases,
-                "require_candidate_pass": self.require_candidate_pass,
-                "passed": self.passed,
-                "regressed_case_ids": list(self.regressed_case_ids),
-                "improved_case_ids": list(self.improved_case_ids),
-                "unchanged_case_ids": list(self.unchanged_case_ids),
-                "identity_mismatches": [
-                    mismatch.to_dict() for mismatch in self.identity_mismatches
-                ],
-                "incompatible_reasons": list(self.incompatible_reasons),
-                "metadata": attributes_to_dict(self.metadata),
-                "cases": [case.to_dict() for case in self.cases],
-            },
-        )
+        return {
+            "schema_version": self.schema_version,
+            "kind": _COMPARISON_KIND,
+            "baseline_run_id": self.baseline_run_id,
+            "candidate_run_id": self.candidate_run_id,
+            "trial_aggregation": self.trial_aggregation.value,
+            "metric_aggregation": self.metric_aggregation.value,
+            "require_same_cases": self.require_same_cases,
+            "require_candidate_pass": self.require_candidate_pass,
+            "passed": self.passed,
+            "regressed_case_ids": list(self.regressed_case_ids),
+            "improved_case_ids": list(self.improved_case_ids),
+            "unchanged_case_ids": list(self.unchanged_case_ids),
+            "identity_mismatches": [mismatch.to_dict() for mismatch in self.identity_mismatches],
+            "incompatible_reasons": list(self.incompatible_reasons),
+            "metadata": attributes_to_dict(self.metadata),
+            "cases": [case.to_dict() for case in self.cases],
+        }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> ComparisonSummary:
