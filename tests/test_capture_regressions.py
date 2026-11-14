@@ -1,4 +1,4 @@
-"""REF-01 privacy and finite-admission regressions."""
+"""Privacy and finite-admission regressions."""
 
 import json
 from typing import Any, cast

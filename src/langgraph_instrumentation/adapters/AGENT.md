@@ -16,8 +16,10 @@ or presentation formats.
 - Normalize callback UUIDs to canonical strings before recorder calls. Preserve
   parent IDs, LangGraph metadata, model identifiers, and tool-call identifiers
   as safe attributes.
-- Classify LangGraph root chains as graphs and chains carrying
-  `langgraph_node` metadata as nodes. Other chain callbacks remain chains.
+- Classify LangGraph root chains as graphs. A chain is a node only when it carries
+  a `graph:step:*` tag or its callback name equals its `langgraph_node`; nested
+  runnables inherit that metadata and remain chains. Delegated
+  `langchain_create_agent` subagents are graphs named by `lc_agent_name`.
 - Project every application payload with `CapturePolicy`, `MessageProjector`,
   or `MetadataProjector` before it crosses the recorder boundary. Extract token
   usage with `UsageExtractor` and let the recorder own cumulative totals.
@@ -31,7 +33,7 @@ or presentation formats.
   opt-in plus a content policy; internal logs must never format exceptions.
 - Classic LLM/retriever hooks not required by modern agent e2e are dropped.
   Both `ls_integration="langgraph"` and `"deepagents"` identify modern root graphs.
-  REF-03 tests actual Deep Agents tools/delegation/streaming, not callback mocks.
+  Test actual Deep Agents tools, delegation and streaming, not callback mocks.
 - Error callbacks must preserve the application's original exception if
   instrumentation also fails. Adapter callback failures are non-fatal by
   default; opt-in `raise_error` is for diagnostics outside application-error

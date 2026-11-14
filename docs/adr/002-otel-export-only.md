@@ -1,6 +1,6 @@
 # ADR-002: optional neutral-record OpenTelemetry SDK consumer
 
-Status: accepted for REF-11, 2026-11-14. **Export-only**, not full distributed
+Status: accepted, 2026-11-14. **Export-only**, not full distributed
 context interoperability. Import explicitly from `exporters.otel` with the `otel`
 extra. Do not configure a global provider or read OTEL environment configuration.
 

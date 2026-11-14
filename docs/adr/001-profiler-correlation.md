@@ -1,6 +1,6 @@
 # ADR-001: no-go for automatic py-spy/Speedscope timeline correlation
 
-Status: accepted no-go for REF-10; 2026-11-14. No sampling engine or production
+Status: accepted no-go; 2026-11-14. No sampling engine or production
 attach integration is added. Revisit only with evidenced timestamp/process domains.
 
 ## Spike evidence
@@ -29,7 +29,7 @@ exact per-task CPU attribution, or promising cross-process monotonic alignment.
 An SDK conversion cannot recover missing information. Adding a bespoke sampler
 would duplicate maintained tools and expand privacy, ABI and lifecycle risks.
 Keep the existing Perfetto artifact and a clearly separate Speedscope companion.
-REF-09 process counters remain the supported time-aligned resource path.
+Process counters remain the supported time-aligned resource path.
 
 Reopen this ADR only for a maintained profiler format with real sample timestamps,
 an explicit process identity and measured clock-domain anchors/uncertainty. Future

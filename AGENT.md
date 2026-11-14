@@ -2,20 +2,19 @@
 
 ## Purpose
 
-The local-first refactor is complete and merged into `main`. `EPIC_REFACTOR.md`
-records the delivered architecture and acceptance evidence. Current follow-ups
-are indexed in GitHub issue #12; work against each issue's scope and acceptance
-criteria rather than reviving the superseded FRK roadmap.
+Guidance for changes to this repository. Architecture boundaries are recorded in
+[`docs/architecture.md`](docs/architecture.md); current work is tracked in GitHub
+issues. Work against each issue's scope and acceptance criteria.
 
 ## Repository Rules
 
 - Use the `src/langgraph_instrumentation/` package for library code.
 - Keep examples outside the library package.
-- Do not restore prototype import paths; this refactor intentionally makes a
-  clean API break.
+- Do not restore prototype import paths; the clean API break is intentional.
 - Modern LangGraph/Deep Agents only. Rewrite or drop uncertain legacy framework
   features rather than building compatibility wrappers. Perfetto is primary;
-  resource sampling, profiling and OTel are optional lower-priority slices.
+  resource sampling and OTel are optional lower-priority slices. Profiler timeline
+  correlation is a documented no-go, not a pending feature.
 - Preserve existing unrelated worktree changes. Generated artifacts currently
   present in the worktree must not be silently committed or deleted.
 - Never use real credentials or require paid/network LLM calls in tests.
@@ -48,10 +47,9 @@ criteria rather than reviving the superseded FRK roadmap.
 
 ## Required Verification
 
-Each feature must add tests at its own abstraction boundary. Before considering
-an REF complete, run the repository's configured formatter, linter, type checker,
-unit tests, and package build. If a tool is not configured yet, REF-01 owns that
-configuration; do not introduce an undocumented replacement.
+Each feature must add tests at its own abstraction boundary. Before submitting,
+run the repository's configured formatter, linter, type checker, unit tests, and
+package build. Do not introduce an undocumented replacement tool.
 
 Tests must not depend on:
 
@@ -69,23 +67,15 @@ Maintain scoped `AGENT.md` files with the directory they govern:
 - `src/langgraph_instrumentation/stores/AGENT.md`
 - `src/langgraph_instrumentation/exporters/AGENT.md`
 
-The nearest guide supplements this file and should document local protocols,
-forbidden dependencies, and the contract or fixture suite that implementations
-must pass. Release-gate changes must review all guides against the architecture.
+The nearest guide supplements this file and documents local protocols, forbidden
+dependencies, and the contract or fixture suite implementations must pass. Review
+all guides when architecture boundaries change.
 
 ## Pull Requests
 
-- Include the feature ID, for example `REF-05`, in the title.
-- Link the feature issue and parent epic.
-- State which acceptance criteria are satisfied.
+- Link the issue and state which acceptance criteria are satisfied.
 - Identify deferred work explicitly instead of adding speculative compatibility
   or abstraction layers.
-- Record non-blocking deferred work in
-   [backlog #12](https://github.com/mylonasc/langgraph_instrumentation/issues/12)
-  with its origin, impact, rationale, priority, and completion condition. Never
-  use technical debt to bypass correctness, security, data-loss,
+- Never use technical debt to bypass correctness, security, data-loss,
   public-contract, or required-test failures.
-- The `epic-refactor` integration branch has been merged into `main`; its epic #13
-  is closed. Commit completed slices separately and update the relevant current
-  issue with verification evidence. Close issues only after their gates pass;
-  do not treat deferred evaluation tickets as implementation commitments.
+- Commit completed slices separately and close issues only after their gates pass.

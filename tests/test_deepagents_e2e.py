@@ -140,7 +140,7 @@ def test_real_deep_agent_privacy_and_usage(deep_agent_example, mode, capture, ca
     session.export(destination)
     assert PRIVATE not in serialized and PRIVATE not in destination.read_text()
     assert PRIVATE not in caplog.text
-    assert all(not span.events for span in bundle.spans)  # per-token capture is opt-in
+    assert all(not span.events for span in bundle.spans), "per-token capture is opt-in"
     assert not session.diagnostics["destination_failures"]
     assert not session.diagnostics["lifecycle"]
     if capture.mode is CaptureMode.BOUNDED:
@@ -150,7 +150,7 @@ def test_real_deep_agent_privacy_and_usage(deep_agent_example, mode, capture, ca
     else:
         assert VISIBLE not in serialized
         assert not any(session.diagnostics.values())
-    assert list(tmp_path.iterdir()) == [destination]  # StateBackend never writes host files
+    assert list(tmp_path.iterdir()) == [destination], "StateBackend must not write host files"
 
 
 @pytest.mark.parametrize("mode", MODES)

@@ -1,4 +1,4 @@
-# REF-04 recording benchmark
+# Recording benchmark
 
 Run `uv run --no-sync python scripts/benchmark_recording.py` with development
 dependencies installed. Five repetitions; median elapsed milliseconds; graph

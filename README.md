@@ -138,15 +138,14 @@ and an `incomplete` flag. Unfinished spans become abandoned on orderly shutdown.
 ### Graph identity, retries and checkpoints
 
 Callback UUIDs identify individual executions; node names alone do not identify a
-task. Step/path/namespace/checkpoint metadata is retained where supplied by the
-supported runtime. Nested and dynamic fan-out executions keep separate canonical
-span IDs and overlap-safe visual tracks. Root status describes the invocation's
-outcome: a handled failed retry does not turn a successful root into an error.
-Failed attempt spans remain visible. Runtime interrupts are control flow, not
-application errors; `execution.interrupted` marks the interrupted invocation.
+task. Step/path/namespace/checkpoint metadata is retained where supplied. Root
+status describes the invocation's outcome: a handled failed retry does not turn a
+successful root into an error, and failed attempt spans remain visible. Runtime
+interrupts are control flow, not application errors; `execution.interrupted` marks
+the invocation.
 
 A resumed invocation is a new trace, not a span that pretends to survive restart.
-Use a checkpoint plus an **explicit evidenced link** to the prior root:
+Link it explicitly to the prior root:
 
 ```python
 from langgraph_instrumentation import SpanLink
@@ -159,26 +158,16 @@ config = {
 }
 ```
 
-The same API supports other explicitly known `follows_from`/dependency links.
-`TraceRecorder.start_span(links=...)` accepts neutral `SpanLink` records (at most
-32 retained). Links round-trip independently from parents. `link:*` arrows render
-only when both endpoints exist in the same exported clock domain and are ordered
-in time; external endpoints remain metadata. Graph dependencies are **not inferred
-from names, containment, or join timing**. Thread/session IDs group invocations but
-alone do not prove a resume relationship. Cross-process clock correlation is not
-supported by the local exporter.
-
-Unknown/evicted parents in default mode create a separate explicitly partial root
-with `recording.orphan_parent` and a loss counter, never attach to an unrelated
-trace. Strict mode rejects unknown parents. Late children use the bounded completed
-context cache only while their parent's context remains known.
+Links never imply causality from names, containment, or timing. `link:*` arrows
+render only when both endpoints exist in the same exported clock domain; external
+endpoints remain metadata. Unknown or evicted parents become explicit partial roots
+in default mode and are rejected in strict mode.
 
 ## Safety and recording limits
 
-Metadata-only capture is the default: bodies are replaced with original types/
-sizes without traversing builtin container contents. Arbitrary mappings report
-their type, not a possibly unsafe custom length. Exceptions retain their type
-only. Internal diagnostics do not log exception bodies/tracebacks.
+Metadata-only capture is the default: bodies are replaced with original types and
+sizes without traversing builtin container contents. Exceptions retain only their
+type; internal diagnostics never log exception bodies or tracebacks.
 
 ```python
 from langgraph_instrumentation import CapturePolicy, RecordingLimits, RecordingSession
@@ -191,48 +180,32 @@ with RecordingSession(
 ```
 
 Content capture is explicit and may expose sensitive text. `RedactionPolicy`
-redacts matching mapping fields; it is not a universal secret detector for free
+redacts matching mapping fields but is not a universal secret detector for free
 text. Message content is never deduplicated across recordings. Exception message
-capture additionally requires the adapter's `capture_exception_messages=True`.
-Stack capture is not supported.
+capture requires `capture_exception_messages=True`; stack capture is not supported.
+All capture modes retain safety budgets of 2,048 traversal nodes, 16 KiB encoded
+payload and depth 64. `full()` removes the smaller bounded-mode limits, not these
+safety budgets; truncation and budget markers are explicit.
 
-All capture modes have safety budgets: 2,048 traversal nodes, 16 KiB encoded payload
-and a maximum depth of 64. `full()` disables the smaller bounded-mode collection/
-string limits, not these safety budgets. Truncation/budget markers are explicit.
+Default recorder limits are 4,096 spans, 8,192 events and 4,096 metrics per
+recording, with per-trace caps of 2,048 spans, 4,096 events and 2,048 metrics.
+Attributes are capped at 16 KiB per mapping and 8 MiB globally / 2 MiB per trace.
+The memory store retains 128 finalized traces. Completion is not denied when
+admission is exhausted; attributes and events are dropped before structure.
+`recording.diagnostics` reports loss, store retention and lane fallback; nonzero
+means incomplete recording. Override limits with `RecordingLimits` and start a new
+session to replenish admission budgets.
 
-Default lifetime recorder budgets: 4,096 spans, 8,192 events, 4,096 metric points,
-256 lanes, and 16 KiB per attribute mapping. Aggregate encoded attributes are
-capped at 8 MiB globally and 2 MiB per trace, including repeated completion data
-(conservative charging). Structural record counts/names bound additional Python
-overhead; these are not exact RSS limits. Per-trace caps are 2,048 spans, 4,096
-events, and 2,048 metrics; each span retains at most 128 detailed events. At most
-128 spans may be active. Names/IDs are bounded. Completion is
-not denied when admission is exhausted. The memory store retains up to 128 traces,
-evicting only finalized traces. Start a new session to replenish admission budgets.
-`recording.diagnostics` returns loss observations, including store retention;
-nonzero means incomplete
-recording, including track/lane fallback. Attributes/events are dropped before
-structure; admission never evicts active traces. Completed numeric budget ledgers
-stay bounded by lifetime span admission so late children cannot reset a budget.
-Span payloads leave active state at completion; context caches retain only headers.
-
-Spans older than ten minutes are cooperatively abandoned on new admission,
-stream-chunk observation, snapshot, or explicit `recorder.expire_spans()`. There is
-no background expiration thread: idle recorders are maintained when accessed or
-closed. Configure `max_span_age_ns` for longer operations. Late ends of expired
-spans are harmless; loss and abandoned status remain visible.
-
-Streaming records first/last chunk offsets and chunk counts in `llm.streaming`
-without retaining text. These are callback chunks, not tokenizer token counts.
-`RecordingSession(capture_streaming_tokens=True)` additionally retains detailed
-events under the same global/per-trace/per-span budgets. Actual provider usage is
-still taken from the final model response exactly once. See
+Spans older than ten minutes are cooperatively abandoned on the next recorder
+access; there is no background expiration thread. Streaming records chunk counts
+and offsets without retaining text unless `capture_streaming_tokens=True` is set.
+Actual provider usage is taken from the final model response exactly once. See
 [`benchmarks/REF04_BASELINE.md`](benchmarks/REF04_BASELINE.md) for overhead and
 regression thresholds.
 
-Direct recorder/store calls take trusted JSON and safe operation/resource identity,
-not arbitrary application payloads. Apply capture policy before that boundary.
-Direct store writes do not inherit recorder budgets.
+Direct recorder/store calls take trusted JSON, not arbitrary application payloads.
+Apply capture policy before that boundary. Direct store writes do not inherit
+recorder budgets.
 
 ## Lifecycle and ownership
 
@@ -262,61 +235,39 @@ python -m langgraph_instrumentation export agent.db TRACE_ID trace.json
 ```
 
 CLI inspection uses read-only connections. The store uses versioned schema v1,
-foreign-key cascades, WAL, FULL synchronization, per-operation transactions and a
-two-second busy timeout. One connection is serialized across threads; independent
-connections coordinate through SQLite. It stores neutral records, links, resource
-identity, events and metrics, not Perfetto dictionaries. Session loss diagnostics
-persist on orderly close. `TraceQuery(limit=..., offset=...)` bounds listing reads;
-`delete_traces(before_unix_ns=...)` retains active traces and deletes whole finalized
-traces. Exact start/completion replays are idempotent. No silent migration of an
-unknown schema or unrelated unversioned database is attempted.
+transactions, WAL and a serialized connection; it stores neutral records, links,
+resource identity, events and metrics, not Perfetto dictionaries. Session loss
+diagnostics persist on orderly close. `TraceQuery` bounds listing reads;
+`delete_traces(before_unix_ns=...)` removes whole finalized traces only. Exact
+start/completion replays are idempotent; unknown schemas are never migrated
+silently.
 
 After a crashed writer, normal open preserves unfinished spans. **Only after all
 previous writers have stopped**, opt into `SQLiteTraceStore(path, recover=True)`
 or `python -m langgraph_instrumentation recover agent.db`. Recovery marks work
-abandoned and flags its duration as a last-observed lower bound; it never treats
-offline downtime as execution or guesses that another live writer is dead.
-Do not reuse a nonempty database with a new `RecordingSession`; reopen it for
-query/export, or start a new recording file. Database retention/rotation is caller
-controlled. Prefer memory capture when minimizing callback I/O overhead; durable
-SQLite commits have a real latency cost.
+abandoned and its duration as a last-observed lower bound. Do not reuse a nonempty
+database with a new `RecordingSession`; reopen it for query/export or start a new
+recording file. Prefer memory capture when minimizing callback I/O overhead.
 
 ### Session resource ownership
 
 The session owns and closes its default memory store. A supplied `store=` must be
 empty and dedicated to this recording; it remains open after session shutdown.
-Session snapshots are immutable, and its final snapshot remains exportable after
-the owned store closes. `close()` is idempotent. Exporting to a path uses atomic
-replacement and UTF-8; exporting to a text file object cannot guarantee atomicity.
-The destination's parent directory must already exist.
+Snapshots are immutable and remain exportable after close. `close()` is idempotent.
+Path exports use atomic replacement and UTF-8; file-object exports cannot guarantee
+atomicity. The destination's parent directory must already exist. Lower-level
+`TraceRecorder` closes its supplied store by default; set `owns_store=False` to
+retain ownership.
 
-Lower-level `TraceRecorder` closes its supplied store by default; set
-`owns_store=False` to retain ownership. Flush/close timeout arguments are seconds;
-dependency timeouts are cooperative, not hard cancellation. Preserve your original
-application exception when instrumentation also fails. Strict mode is for tests
-and diagnostics, not the default production failure policy.
-
-Accepted in-memory lifecycle is independent of destinations in default mode.
-If a store start/event/completion fails, correlation continues and independent
-`processors=` still receive completed immutable spans (including resource/service
-identity). The failing store may contain a partial recording; diagnostics disclose
-loss, not durability. Detailed event failure stops writes for that span rather than
-attempting a misleading completion against incomplete persisted events. Strict
-mode instead rejects failed transitions and permits explicit diagnostic retries.
-Destination diagnostics are body-free and rate-limited.
-
-At most 256 lifecycle operations may queue behind a slow store. Caller wait
-timeouts do not forcibly cancel uncooperative Python callbacks; release or stop
-such a destination to complete background shutdown. Callbacks must not drive their
-own recorder lifecycle; processor reentry is rejected. Concurrent session close
-shares recorder shutdown and serializes final snapshots/resource cleanup. A failed
-best-effort close has a stable `False` result and does not redispatch spans; final
-snapshots remain readable once resources have quiesced.
-
-Exact store span start/completion replays are idempotent; conflicting replays fail.
-Event/metric appends lack operation IDs and are **not** automatically retried after
-an uncertain acknowledgement. A remote commit can succeed before its response is
-lost: the store protocol does not promise that every remote exception proves rollback.
+Flush/close timeouts are cooperative, not hard cancellation. Preserve the original
+application exception when instrumentation also fails. Strict mode is for tests and
+diagnostics, not the default production policy. Accepted in-memory lifecycle is
+independent of destinations: if a store operation fails, correlation continues and
+independent `processors=` still receive completed spans. The failing store may
+contain a partial recording; diagnostics disclose loss, not durability. At most 256
+lifecycle operations may queue behind a slow store. Event/metric appends are not
+automatically retried after an uncertain acknowledgement; a remote commit can
+succeed before its response is lost.
 
 ## Supported scope and migration
 
@@ -329,9 +280,10 @@ retriever hooks, old signatures/import paths, and automatic patching are not.
 
 **Clean break:** `PerfettoTracer`, `PerfettoLogger`, and
 `LangGraphInstrumentationHandler` have been removed. Replace them with
-`RecordingSession` and explicit callback attachment. Provider-backed prototype
-examples were replaced with the reproducible local agent. There are no compatibility
-wrappers, logging-handler side effects, or hash-derived Python thread tracks.
+`RecordingSession` and explicit callback attachment; there are no compatibility
+wrappers or logging-handler side effects. See [`CHANGELOG.md`](CHANGELOG.md) for
+upgrade notes and [`docs/architecture.md`](docs/architecture.md) for component
+boundaries.
 
 ## Development and artifact verification
 
@@ -364,7 +316,7 @@ are not claimed by this matrix. See [release/upgrade notes](CHANGELOG.md),
 [security and artifact handling](SECURITY.md), and the
 [benchmark reproduction and regression budgets](benchmarks/REF04_BASELINE.md).
 
-## Roadmap and alternatives
+## Optional integrations
 
 ### Optional process resource counters
 
@@ -416,16 +368,12 @@ but cannot kill an uncooperative foreign exporter. A destination failure does no
 erase local Perfetto records. The optional suite uses only an isolated loopback
 OTLP receiver, never an external service; the default suite excludes it.
 
-See [`EPIC_REFACTOR.md`](EPIC_REFACTOR.md) and [epic #13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
-Local SQLite, explicit graph links, bounded recording and modern agent e2e are
-implemented. Process CPU/RSS and SDK export-only OTel are optional extras; full
-distributed propagation and automatic stack timeline correlation are not provided.
+### Scope limits and alternatives
 
-Profiler spike outcome: [ADR-001](docs/adr/001-profiler-correlation.md) is a no-go
-for automatic py-spy Speedscope-to-Perfetto alignment: its sample-count timeline
-lacks the timestamps needed to recover elapsed gaps. The ADR includes an external
-opt-in companion-view workflow; no profiler, attach or privilege escalation ships.
-
-For broader monitoring now, evaluate [OpenInference](https://github.com/Arize-ai/openinference)
-with local Phoenix, MLflow Tracing, or self-hosted Langfuse. OpenInference can target
-any OTel-compatible backend; this project's focus is standalone local artifacts.
+Full distributed propagation and automatic stack timeline correlation are not
+provided. [ADR-001](docs/adr/001-profiler-correlation.md) records the no-go for
+automatic py-spy Speedscope alignment; no profiler, attach or privilege escalation
+ships. For broader monitoring, evaluate
+[OpenInference](https://github.com/Arize-ai/openinference) with local Phoenix,
+MLflow Tracing or self-hosted Langfuse; this project focuses on standalone local
+artifacts.

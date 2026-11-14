@@ -1,6 +1,6 @@
-# REF-09 resource sampler overhead
+# Resource sampler overhead
 
-CPython 3.12.3, Linux x86-64, psutil 7.2.2, same machine as REF-04.
+CPython 3.12.3, Linux x86-64, psutil 7.2.2, same machine as the recording benchmark.
 200 manual `ProcessSampler.sample_once()` calls against a real source and memory
 store: median 48.8 µs, p95 53.9 µs; total sampler time 9.81 ms. No dropped/missing
 samples. At the default 100 ms interval this baseline costs roughly 0.05% of one

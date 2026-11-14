@@ -1,4 +1,4 @@
-"""REF-10 no-go evidence: count-weighted stacks cannot reconstruct wall time."""
+"""No-go evidence: count-weighted stacks cannot reconstruct wall time."""
 
 import pytest
 
