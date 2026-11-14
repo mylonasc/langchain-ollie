@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
-from ..models import SpanKind, TraceBundle
+from ..models import JSONValue, SpanKind, TraceBundle, freeze_attributes
 from .models import (
     EvalAssessment,
     EvalCase,
@@ -17,6 +17,7 @@ from .models import (
     EvalTurn,
     EvalTurnResult,
     MetricCompleteness,
+    MissingMetricPolicy,
 )
 
 
@@ -235,7 +236,7 @@ class MaxMetric:
 
     metric: str
     maximum: int | float
-    missing: str = "fail"
+    missing: MissingMetricPolicy = MissingMetricPolicy.FAIL
     name: str = "max_metric"
 
     def __post_init__(self) -> None:
@@ -243,20 +244,24 @@ class MaxMetric:
             raise ValueError("metric name must not be empty")
         if isinstance(self.maximum, bool) or not isinstance(self.maximum, (int, float)):
             raise TypeError("maximum must be a number")
-        if self.missing not in ("fail", "error", "skip"):
-            raise ValueError("missing must be 'fail', 'error' or 'skip'")
+        try:
+            policy = MissingMetricPolicy(self.missing)
+        except ValueError as exc:
+            raise ValueError("missing must be 'fail', 'error' or 'skip'") from exc
+        object.__setattr__(self, "missing", policy)
 
     def evaluate(self, context: EvalContext) -> EvalAssessment:
         metric = context.metrics.get(self.metric)
         evidence: dict[str, object] = {
             "metric": self.metric,
             "maximum": self.maximum,
+            "missing_policy": self.missing.value,
         }
         if metric is None or metric.completeness is MetricCompleteness.MISSING:
             status = {
-                "fail": EvalStatus.FAIL,
-                "error": EvalStatus.ERROR,
-                "skip": EvalStatus.SKIP,
+                MissingMetricPolicy.FAIL: EvalStatus.FAIL,
+                MissingMetricPolicy.ERROR: EvalStatus.ERROR,
+                MissingMetricPolicy.SKIP: EvalStatus.SKIP,
             }[self.missing]
             return EvalAssessment(
                 evaluator=self.name,
@@ -292,7 +297,7 @@ class MinMetric:
 
     metric: str
     minimum: int | float
-    missing: str = "fail"
+    missing: MissingMetricPolicy = MissingMetricPolicy.FAIL
     name: str = "min_metric"
 
     def __post_init__(self) -> None:
@@ -300,20 +305,24 @@ class MinMetric:
             raise ValueError("metric name must not be empty")
         if isinstance(self.minimum, bool) or not isinstance(self.minimum, (int, float)):
             raise TypeError("minimum must be a number")
-        if self.missing not in ("fail", "error", "skip"):
-            raise ValueError("missing must be 'fail', 'error' or 'skip'")
+        try:
+            policy = MissingMetricPolicy(self.missing)
+        except ValueError as exc:
+            raise ValueError("missing must be 'fail', 'error' or 'skip'") from exc
+        object.__setattr__(self, "missing", policy)
 
     def evaluate(self, context: EvalContext) -> EvalAssessment:
         metric = context.metrics.get(self.metric)
         evidence: dict[str, object] = {
             "metric": self.metric,
             "minimum": self.minimum,
+            "missing_policy": self.missing.value,
         }
         if metric is None or metric.completeness is MetricCompleteness.MISSING:
             status = {
-                "fail": EvalStatus.FAIL,
-                "error": EvalStatus.ERROR,
-                "skip": EvalStatus.SKIP,
+                MissingMetricPolicy.FAIL: EvalStatus.FAIL,
+                MissingMetricPolicy.ERROR: EvalStatus.ERROR,
+                MissingMetricPolicy.SKIP: EvalStatus.SKIP,
             }[self.missing]
             return EvalAssessment(
                 evaluator=self.name,
@@ -343,6 +352,127 @@ class MinMetric:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class StatePredicate:
+    """Require a dotted path in the structured output to equal a value.
+
+    The path walks JSON objects by key and lists by numeric index, for example
+    ``result.count`` or ``items.0.status``. This checks structured state without
+    making the evaluator depend on an application class.
+    """
+
+    path: str
+    expected: JSONValue
+    name: str = "state_predicate"
+
+    def __post_init__(self) -> None:
+        if not self.path.strip():
+            raise ValueError("path must not be empty")
+
+    def evaluate(self, context: EvalContext) -> EvalAssessment:
+        if context.output is None:
+            return EvalAssessment(
+                evaluator=self.name,
+                status=EvalStatus.ERROR,
+                message="the adapter did not provide structured output",
+                evidence={"path": self.path, "expected": self.expected},
+            )
+        found, observed = _lookup_path(context.output.value, self.path)
+        passed = found and _json_equal(observed, self.expected)
+        return EvalAssessment(
+            evaluator=self.name,
+            status=EvalStatus.PASS if passed else EvalStatus.FAIL,
+            message=(
+                None if passed else f"no value at {self.path!r} matched the expected JSON value"
+            ),
+            evidence={
+                "path": self.path,
+                "expected": self.expected,
+                "observed": observed,
+                "found": found,
+            },
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class JudgeVerdict:
+    """A structured judge decision; the judge itself is caller-supplied."""
+
+    passed: bool
+    reasoning: str | None = None
+    score: float | None = None
+    evidence: Mapping[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.passed, bool):
+            raise TypeError("passed must be a boolean")
+        if self.reasoning is not None and (
+            not isinstance(self.reasoning, str) or not self.reasoning.strip()
+        ):
+            raise ValueError("reasoning must be a non-empty string or null")
+        if self.score is not None:
+            if isinstance(self.score, bool) or not isinstance(self.score, (int, float)):
+                raise TypeError("score must be a number or null")
+            if self.score != self.score or self.score in (float("inf"), float("-inf")):
+                raise ValueError("score must be finite")
+        object.__setattr__(self, "evidence", freeze_attributes(self.evidence))
+
+
+@runtime_checkable
+class Judge(Protocol):
+    """Optional quality judge, typically backed by an application or adapter."""
+
+    @property
+    def name(self) -> str:
+        """Stable judge identity for results."""
+        ...
+
+    def judge(self, context: EvalContext, /) -> JudgeVerdict:
+        """Return a structured verdict; provider failures raise."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class JudgeEvaluator:
+    """Adapt a ``Judge`` to the deterministic evaluator protocol.
+
+    The core package imports no provider SDK and never requires a judge. The
+    caller supplies a judge explicitly; exceptions become assessment errors.
+    """
+
+    judge: Judge
+    override_name: str | None = None
+
+    @property
+    def name(self) -> str:
+        return self.override_name or self.judge.name
+
+    def evaluate(self, context: EvalContext) -> EvalAssessment:
+        try:
+            verdict = self.judge.judge(context)
+        except Exception as exc:
+            return EvalAssessment(
+                evaluator=self.name,
+                status=EvalStatus.ERROR,
+                message=f"judge raised {type(exc).__name__}",
+            )
+        if not isinstance(verdict, JudgeVerdict):
+            return EvalAssessment(
+                evaluator=self.name,
+                status=EvalStatus.ERROR,
+                message="judge did not return a JudgeVerdict",
+            )
+        evidence = {"judge": self.judge.name}
+        evidence.update(dict(verdict.evidence))
+        return EvalAssessment(
+            evaluator=self.name,
+            status=EvalStatus.PASS if verdict.passed else EvalStatus.FAIL,
+            message=verdict.reasoning,
+            score=verdict.score,
+            evidence=evidence,
+        )
+
+
 def _output_text(context: EvalContext) -> str | None:
     return context.output.text if context.output is not None else None
 
@@ -353,3 +483,30 @@ def _tool_name_matches(observed: str, expected: str) -> bool:
         or observed == f"Tool: {expected}"
         or observed.endswith(f": {expected}")
     )
+
+
+def _lookup_path(value: JSONValue, path: str) -> tuple[bool, JSONValue]:
+    current: JSONValue = value
+    for segment in path.split("."):
+        if isinstance(current, Mapping):
+            if segment not in current:
+                return False, None
+            current = current[segment]
+            continue
+        if isinstance(current, list):
+            try:
+                index = int(segment)
+            except ValueError:
+                return False, None
+            if not 0 <= index < len(current):
+                return False, None
+            current = current[index]
+            continue
+        return False, None
+    return True, current
+
+
+def _json_equal(observed: JSONValue, expected: JSONValue) -> bool:
+    if isinstance(observed, bool) != isinstance(expected, bool):
+        return False
+    return observed == expected

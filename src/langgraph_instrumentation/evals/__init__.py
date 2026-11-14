@@ -6,6 +6,24 @@ from .adapters import (
     ExecutionAdapter,
     LangGraphEvalAdapter,
 )
+from .aggregation import (
+    CaseAggregate,
+    MetricAggregation,
+    RunAggregate,
+    TrialAggregation,
+    aggregate_run,
+)
+from .comparison import (
+    DEFAULT_IDENTITY_KEYS,
+    CaseComparison,
+    ComparisonKind,
+    ComparisonSummary,
+    IdentityMismatch,
+    MetricComparison,
+    MetricDirection,
+    MetricRule,
+    compare_runs,
+)
 from .datasets import load_cases, save_cases
 from .evaluators import (
     ContainsText,
@@ -13,9 +31,13 @@ from .evaluators import (
     Evaluator,
     ExactText,
     FunctionEvaluator,
+    Judge,
+    JudgeEvaluator,
+    JudgeVerdict,
     MaxMetric,
     MinMetric,
     RegexText,
+    StatePredicate,
     ToolCalled,
 )
 from .metrics import aggregate_turn_metrics, measure_traces
@@ -34,12 +56,18 @@ from .models import (
     EvalTurnResult,
     MetricCompleteness,
     MetricScope,
+    MissingMetricPolicy,
 )
 from .runner import EvalRunner
 
 __all__ = [
     "AsyncExecutionAdapter",
+    "CaseAggregate",
+    "CaseComparison",
+    "ComparisonKind",
+    "ComparisonSummary",
     "ContainsText",
+    "DEFAULT_IDENTITY_KEYS",
     "EvalAssessment",
     "EvalCase",
     "EvalContext",
@@ -59,14 +87,28 @@ __all__ = [
     "ExactText",
     "ExecutionAdapter",
     "FunctionEvaluator",
+    "IdentityMismatch",
+    "Judge",
+    "JudgeEvaluator",
+    "JudgeVerdict",
     "LangGraphEvalAdapter",
     "MaxMetric",
+    "MetricAggregation",
+    "MetricComparison",
     "MetricCompleteness",
+    "MetricDirection",
+    "MetricRule",
     "MetricScope",
     "MinMetric",
+    "MissingMetricPolicy",
     "RegexText",
+    "RunAggregate",
+    "StatePredicate",
     "ToolCalled",
+    "TrialAggregation",
+    "aggregate_run",
     "aggregate_turn_metrics",
+    "compare_runs",
     "load_cases",
     "measure_traces",
     "save_cases",

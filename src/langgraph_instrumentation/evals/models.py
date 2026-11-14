@@ -60,6 +60,14 @@ class MetricScope(StrEnum):
     PROCESS = "process"
 
 
+class MissingMetricPolicy(StrEnum):
+    """How a check treats unavailable measurement evidence."""
+
+    FAIL = "fail"
+    ERROR = "error"
+    SKIP = "skip"
+
+
 @dataclass(frozen=True, slots=True)
 class EvalError:
     """A bounded execution error without application payload by default."""

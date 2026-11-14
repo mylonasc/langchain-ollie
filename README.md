@@ -162,7 +162,12 @@ uv run --no-sync python examples/local_eval.py
 ```
 
 Quality comparisons, persisted inspection and agent-facing workflows are delivered
-by the later evaluation slices.
+by the later evaluation slices. Repeated trials aggregate with `aggregate_run`
+(fail-safe `WORST` by default; explicit `BEST`/`MAJORITY` and `MEAN`/`MEDIAN`
+metric policies), and `compare_runs` separates quality from explicit `MetricRule`
+performance gates with tolerance, direction and missing-metric policy. Structured
+state checks use `StatePredicate`; optional judges adapt via `JudgeEvaluator`
+without adding a provider dependency.
 
 ## View locally
 

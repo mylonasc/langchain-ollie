@@ -14,9 +14,10 @@ from .evaluators import (
     MaxMetric,
     MinMetric,
     RegexText,
+    StatePredicate,
     ToolCalled,
 )
-from .models import EvalCase, EvalTurn
+from .models import EvalCase, EvalTurn, MissingMetricPolicy
 
 _SCHEMA_VERSION = "1"
 _DATASET_KIND = "langgraph_instrumentation.eval_dataset"
@@ -329,14 +330,20 @@ def _checks_to_specs(checks: Sequence[object]) -> list[dict[str, object]]:
                 "type": "max_metric",
                 "metric": check.metric,
                 "maximum": check.maximum,
-                "missing": check.missing,
+                "missing": check.missing.value,
             }
         elif isinstance(check, MinMetric):
             spec = {
                 "type": "min_metric",
                 "metric": check.metric,
                 "minimum": check.minimum,
-                "missing": check.missing,
+                "missing": check.missing.value,
+            }
+        elif isinstance(check, StatePredicate):
+            spec = {
+                "type": "state_predicate",
+                "path": check.path,
+                "expected": check.expected,
             }
         else:
             raise ValueError(
@@ -388,7 +395,7 @@ def _checks_from_specs(value: object) -> tuple[object, ...]:
                 MaxMetric(
                     _required_string(spec, "metric"),
                     _required_number(spec, "maximum"),
-                    missing=_optional_string(spec, "missing") or "fail",
+                    missing=MissingMetricPolicy(_optional_string(spec, "missing") or "fail"),
                 )
             )
         elif kind == "min_metric":
@@ -396,7 +403,14 @@ def _checks_from_specs(value: object) -> tuple[object, ...]:
                 MinMetric(
                     _required_string(spec, "metric"),
                     _required_number(spec, "minimum"),
-                    missing=_optional_string(spec, "missing") or "fail",
+                    missing=MissingMetricPolicy(_optional_string(spec, "missing") or "fail"),
+                )
+            )
+        elif kind == "state_predicate":
+            checks.append(
+                StatePredicate(
+                    _required_string(spec, "path"),
+                    _json_value(spec.get("expected")),
                 )
             )
         else:
@@ -420,6 +434,10 @@ def _json_mapping(value: object, field_name: str = "value") -> dict[str, JSONVal
         if not isinstance(key, str):
             raise TypeError(f"{field_name} keys must be strings")
     return attributes_to_dict(mapping)
+
+
+def _json_value(value: object) -> JSONValue:
+    return attributes_to_dict({"value": value})["value"]
 
 
 def _mapping(value: object, field_name: str) -> Mapping[str, object]:

@@ -24,6 +24,11 @@ models.
   and normalize outputs without importing framework details into neutral records.
 - Dataset and run artifacts carry a schema version. Unsupported versions fail
   closed; custom evaluator callables are attached programmatically, not serialized.
+  `StatePredicate` is portable; `FunctionEvaluator` and `JudgeEvaluator` are not.
+- Comparisons are deterministic artifacts: aggregate trials first, then compare
+  baseline and candidate runs case by case. Quality regression always regresses;
+  metrics only gate when a `MetricRule` names them. Identity keys must agree or
+  the comparison fails instead of comparing silently.
 - The default suite is offline. Fake models, not agent runtimes; optional judges and
   provider calls require deliberate configuration.
 
@@ -31,4 +36,7 @@ models.
 
 `tests/test_evals.py` covers real LangGraph execution, multi-turn state isolation,
 metrics provenance, failure/skip semantics, dataset round-trips and async execution.
-Add contract tests at the model, adapter, metric or evaluator boundary changed.
+`tests/test_eval_comparison.py` covers fail-safe trial aggregation, metric modes,
+tolerances, missing-metric policies, identity mismatches, added/removed cases and
+optional judges. Add contract tests at the model, adapter, metric or evaluator
+boundary changed.

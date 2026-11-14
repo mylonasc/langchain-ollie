@@ -14,7 +14,11 @@
   adapter for LangGraph, per-trial recording isolation, trace-derived token,
   latency, tool and optional process metrics with explicit provenance, composable
   deterministic checks and time/resource budgets. JSON, JSONL and CSV datasets
-  load without a provider. Quality comparison, persisted inspection and
+  load without a provider.
+- Evaluation quality slice: fail-safe repeated-trial aggregation, baseline
+  comparison with explicit metric rules/tolerances/directions, structured state
+  predicates and an optional provider-free judge protocol. Execution, assessment
+  and missing-evidence outcomes stay distinct. Persisted inspection and
   agent-facing workflows remain in the indexed evaluation slices.
 
 ### Upgrade from the prototype
