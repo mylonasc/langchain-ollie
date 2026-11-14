@@ -84,9 +84,7 @@ def test_demo_report_shows_tradeoff_and_missing_evidence(demo: Any, tmp_path) ->
     golden = load_cases(EXAMPLES / "eval_demo_cases_v2.json")
     baseline_run = EvalRunner(LangGraphEvalAdapter(build_baseline())).run(golden)
     optimized_run = EvalRunner(LangGraphEvalAdapter(build_optimized())).run(golden)
-    comparison = compare_runs(
-        baseline_run, optimized_run, rules=(MetricRule("tokens.total"),)
-    )
+    comparison = compare_runs(baseline_run, optimized_run, rules=(MetricRule("tokens.total"),))
     document = render_report(optimized_run, comparison=comparison)
     assert "efficient-fetch" in document
     assert "tokens.total" in document
