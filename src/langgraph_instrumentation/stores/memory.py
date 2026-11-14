@@ -23,6 +23,7 @@ from ._validation import _active_trace, _same_started_span, _validate_timeout
 class _TraceState:
     trace: Trace
     spans: dict[SpanId, Span] = field(default_factory=dict)
+    starts: dict[SpanId, Span] = field(default_factory=dict)
     metrics: list[MetricPoint] = field(default_factory=list)
     events: dict[SpanId, list[SpanEvent]] = field(default_factory=dict)
     active_count: int = 0
@@ -78,15 +79,13 @@ class MemoryTraceStore:
             elif _active_trace(state.trace) != trace:
                 raise ValueError(f"conflicting metadata for trace {trace.trace_id}")
             if span.span_id in state.spans:
-                existing = state.spans[span.span_id]
-                if existing == span or (
-                    existing.is_finished and _same_started_span(span, existing)
-                ):
+                if state.starts[span.span_id] == span:
                     return
                 raise ValueError(f"span already exists: {span.span_id}")
             if span.parent_span_id is not None and span.parent_span_id not in state.spans:
                 raise ValueError(f"parent span does not exist: {span.parent_span_id}")
             state.spans[span.span_id] = span
+            state.starts[span.span_id] = span
             state.active_count += 1
             if state.trace.end_time_unix_ns is not None:
                 state.trace = replace(state.trace, end_time_unix_ns=None)

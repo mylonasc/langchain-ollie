@@ -179,3 +179,18 @@ def test_contract_failures_are_atomic_and_close_is_idempotent(store_factory: Sto
     assert store.close() is True
     with pytest.raises(RuntimeError, match="closed"):
         store.get_trace(trace.trace_id)
+
+
+def test_exact_start_replay_after_completion_rejects_changed_attributes(
+    store_factory: StoreFactory,
+):
+    store = store_factory()
+    trace = make_trace()
+    root = replace(make_span(trace), attributes={"phase": "start"})
+    store.start_span(trace, root)
+    store.complete_span(replace(finish(root), attributes={"phase": "complete"}))
+    before = store.get_trace(trace.trace_id)
+    store.start_span(trace, root)
+    with pytest.raises(ValueError, match="already exists"):
+        store.start_span(trace, replace(root, attributes={"phase": "conflicting replay"}))
+    assert store.get_trace(trace.trace_id) == before

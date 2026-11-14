@@ -3,7 +3,8 @@
 ## Status and scope
 
 - Status: REF-01 through REF-11 complete on `epic-refactor` (REF-10 is an evidenced
-  no-go, not a profiler implementation). Final extended hosted matrix pending.
+  no-go, not a profiler implementation). All eleven extended hosted jobs passed:
+  https://github.com/mylonasc/langgraph_instrumentation/actions/runs/43580808794.
 - Parent issue: [#13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 - Primary outcome: safe, bounded, offline LangGraph and Deep Agents execution
   traces that can be inspected in Perfetto without a service or credentials.
@@ -249,6 +250,11 @@ stable and may become child issues later; this parent initially tracks the slice
   lint/format/types/build and no-network SDK demo. Optional tests have a required
   dedicated CI job and are excluded from the default core suite. REF-09/10 hosted
   CI also passed: actions/runs/43580038439 and actions/runs/43580262117.
+- Final contract review: memory now preserves the original immutable start record
+  like SQLite, so conflicting attribute replays after completion cannot masquerade
+  as exact idempotent starts. A shared regression covers both implementations.
+  Final local verification: 244 default tests, 12 importer tests and seven optional
+  OTel tests; lint/format/types/build pass. Unrelated `main.py` remains untouched.
 
 ### Useful-state checkpoints
 
