@@ -332,6 +332,11 @@ Local SQLite, explicit graph links, bounded recording and modern agent e2e are
 implemented. CPU/RSS counters, profiler correlation, and
 OpenTelemetry monitoring are lower-priority opt-in follow-ups, not core requirements.
 
+Profiler spike outcome: [ADR-001](docs/adr/001-profiler-correlation.md) is a no-go
+for automatic py-spy Speedscope-to-Perfetto alignment: its sample-count timeline
+lacks the timestamps needed to recover elapsed gaps. The ADR includes an external
+opt-in companion-view workflow; no profiler, attach or privilege escalation ships.
+
 For broader monitoring now, evaluate [OpenInference](https://github.com/Arize-ai/openinference)
 with local Phoenix, MLflow Tracing, or self-hosted Langfuse. OpenInference can target
 any OTel-compatible backend; this project's focus is standalone local artifacts.

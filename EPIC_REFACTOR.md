@@ -226,6 +226,15 @@ stable and may become child issues later; this parent initially tracks the slice
   counter tracks pass. Local overhead: 48.8 µs median/sample (REF09_RESOURCES.md).
   Verification: 240 default tests, 12 importer tests, lint/format/types/build.
 
+- REF-10: [#23](https://github.com/mylonasc/langgraph_instrumentation/issues/23).
+  Completed compatibility spike with a documented **no-go**, not a shipped profiler.
+  py-spy Speedscope count weights lack per-sample clock/process anchors and discard
+  gaps; automated ambiguity fixtures prove automatic elapsed-span correlation is
+  not recoverable. ADR `docs/adr/001-profiler-correlation.md` records source evidence,
+  platform/privacy/permission limits, external opt-in commands and revisit criteria.
+  No process inspection or elevated permissions were used; live-profiler overhead
+  is explicitly unmeasured, not advertised. No fragile fallback engine added.
+
 ### Useful-state checkpoints
 
 - **M1 / REF-02:** install, run a no-network modern LangGraph agent, open a safe
@@ -563,7 +572,7 @@ Test infrastructure rules:
 - [x] REF-07 — SQLite durability and reopen (#20)
 - [x] REF-08 — Local-first release (M4; core epic complete, #21)
 - [x] REF-09 — Optional CPU/RSS sampling (#22)
-- [ ] REF-10 — Optional sampling-profiler interoperability / go-no-go
+- [x] REF-10 — Optional sampling-profiler interoperability / go-no-go (#23; no-go ADR)
 - [ ] REF-11 — Optional OpenTelemetry bridge
 
 Every implementation PR names its REF ID, links this parent, lists prerequisites,
