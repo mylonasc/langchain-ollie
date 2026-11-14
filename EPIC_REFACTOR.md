@@ -2,9 +2,10 @@
 
 ## Status and scope
 
-- Status: REF-01 through REF-11 complete on `epic-refactor` (REF-10 is an evidenced
-  no-go, not a profiler implementation). All eleven extended hosted jobs passed:
-  https://github.com/mylonasc/langgraph_instrumentation/actions/runs/43580808794.
+- Status: REF-01 through REF-11 complete; `epic-refactor` was fast-forward merged
+  into `main` at `67d05ee` on 2026-11-14 (REF-10 is an evidenced no-go, not a
+  profiler implementation). All eleven post-merge hosted jobs passed:
+  https://github.com/mylonasc/langgraph_instrumentation/actions/runs/43583712207.
 - Parent issue: [#13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 - Primary outcome: safe, bounded, offline LangGraph and Deep Agents execution
   traces that can be inspected in Perfetto without a service or credentials.
@@ -12,10 +13,12 @@
 - Core completion: REF-01 through REF-08. Optional follow-ups: REF-09 through REF-11.
 - This plan supersedes the FRK roadmap and architectural commitments in the
   previous version of this file, including making OTLP a release prerequisite.
-  Git history preserves that plan. Existing issues #1 through #12 remain historical
-  references; this document does not close or claim completion of those issues.
-- Existing uncommitted adapter/policy work must be reviewed, not overwritten or
-  assumed merged. Changes to agent guides and old issue cross-links belong to REF-01.
+   Git history preserves that plan. The historical issues were reconciled after
+   merge: #7–#9 and #11 closed as delivered; #1 and #10 closed as superseded, not
+   literal completion of their original requirements. #12 now indexes focused
+   follow-ups. See [the issue review](docs/ISSUE_REVIEW.md).
+- Preserve unrelated uncommitted work; the merge and issue review did not touch
+  the user's untracked `main.py`.
 
 ## Product decisions
 

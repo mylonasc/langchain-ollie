@@ -2,9 +2,10 @@
 
 ## Purpose
 
-This repository is being refactored from a prototype into a modular LangGraph
-instrumentation library. Read `EPIC_REFACTOR.md` before implementing any REF
-feature. Work against the feature's acceptance criteria and dependency list.
+The local-first refactor is complete and merged into `main`. `EPIC_REFACTOR.md`
+records the delivered architecture and acceptance evidence. Current follow-ups
+are indexed in GitHub issue #12; work against each issue's scope and acceptance
+criteria rather than reviving the superseded FRK roadmap.
 
 ## Repository Rules
 
@@ -80,10 +81,11 @@ must pass. Release-gate changes must review all guides against the architecture.
 - Identify deferred work explicitly instead of adding speculative compatibility
   or abstraction layers.
 - Record non-blocking deferred work in
-  [FRK-Techdept #12](https://github.com/mylonasc/langgraph_instrumentation/issues/12)
+   [backlog #12](https://github.com/mylonasc/langgraph_instrumentation/issues/12)
   with its origin, impact, rationale, priority, and completion condition. Never
   use technical debt to bypass correctness, security, data-loss,
   public-contract, or required-test failures.
-- Work on the single `epic-refactor` branch. Commit completed slices separately;
-  update `EPIC_REFACTOR.md` and parent issue #13 with verification evidence. Close
-  child issues/checklist entries only after their prerequisites and gates pass.
+- The `epic-refactor` integration branch has been merged into `main`; its epic #13
+  is closed. Commit completed slices separately and update the relevant current
+  issue with verification evidence. Close issues only after their gates pass;
+  do not treat deferred evaluation tickets as implementation commitments.
