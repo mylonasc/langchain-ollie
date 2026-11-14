@@ -7,10 +7,24 @@ name = "langgraph-instrumentation"
 version = "0.1.0"
 description = "Modular tracing and observability instrumentation for LangGraph agents"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
 requires-python = ">=3.12,<3.15"
 dependencies = [
     "langchain-core>=1.8.0,<1.9",
 ]
+
+[project.urls]
+Repository = "https://github.com/mylonasc/langgraph_instrumentation"
+Issues = "https://github.com/mylonasc/langgraph_instrumentation/issues"
+Changelog = "https://github.com/mylonasc/langgraph_instrumentation/blob/epic-refactor/CHANGELOG.md"
 
 [project.optional-dependencies]
 examples = [

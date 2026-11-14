@@ -6,7 +6,7 @@ import json
 import sqlite3
 import threading
 from collections import defaultdict
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -112,7 +112,7 @@ class SQLiteTraceStore:
             raise
 
     @contextmanager
-    def _transaction(self, *, write: bool = False) -> Iterator[sqlite3.Connection]:
+    def _transaction(self, *, write: bool = False) -> Generator[sqlite3.Connection]:
         with self._lock:
             if self._closed:
                 raise RuntimeError("trace store is closed")

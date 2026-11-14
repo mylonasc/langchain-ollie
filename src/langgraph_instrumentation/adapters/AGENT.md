@@ -21,8 +21,8 @@ or presentation formats.
 - Project every application payload with `CapturePolicy`, `MessageProjector`,
   or `MetadataProjector` before it crosses the recorder boundary. Extract token
   usage with `UsageExtractor` and let the recorder own cumulative totals.
-- Streaming tokens are disabled by default because they can create high-volume,
-  sensitive events.
+- Detailed streaming token events are disabled by default; chunk counts/offsets
+  are metadata-only summaries. Detail is opt-in and bounded by recorder budgets.
 - Keep no active-run map, lifecycle lock, token total, lane registry, store, or
   exporter in an adapter. The recorder owns correlation and lifecycle state.
 - Projection is a single bounded traversal, with framework normalization in

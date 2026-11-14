@@ -208,6 +208,14 @@ stable and may become child issues later; this parent initially tracks the slice
   Deep Agents recordings reopen identically and import into Perfetto.
   Verification: 232 default tests, 11 importer tests, lint/format/types and build.
 
+- REF-08 release-gate implementation: [#21](https://github.com/mylonasc/langgraph_instrumentation/issues/21).
+  Added minimum/locked/current required CI, socket-blocked clean-wheel quickstarts
+  including SQLite/CLI, MIT metadata, security/upgrade/schema policy and `py.typed`.
+  Reviewed scoped guides and removed stale progress claims. Local evidence: 232
+  default tests on CPython 3.12/3.13/3.14, 11 importer tests, lint/format/types/build,
+  and clean-wheel offline demos outside checkout pass. Hosted expanded matrix is
+  pending; REF-07's current-toolchain annotation warning is fixed in this slice.
+
 ### Useful-state checkpoints
 
 - **M1 / REF-02:** install, run a no-network modern LangGraph agent, open a safe

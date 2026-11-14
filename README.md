@@ -4,6 +4,11 @@ Safe, bounded **local agent performance traces**, viewed offline in
 [Perfetto](https://ui.perfetto.dev). No server, provider credentials, or monitoring
 backend is required. Callback durations describe elapsed execution, not CPU time.
 
+Node wall duration includes callback overhead, scheduling, child work and waits;
+overlapping durations must not be summed as CPU time or advertised as a proven
+critical path. No automatic cross-process tracing, host tool sandbox, background
+export service or full distributed-context propagation is installed.
+
 ## Install and run
 
 Python 3.12–3.14, standard GIL-enabled CPython:
@@ -53,8 +58,8 @@ The same callback works with `await app.ainvoke(...)`, `app.stream(...)`, and
 `app.astream(...)`. Finish consuming streams before closing a session. Deep Agents
 e2e tests cover all four methods, nested worker chunks, token accounting, privacy,
 and repeated runs sharing the callback. Per-token event capture stays disabled by
-default. Use one session per bounded recording window; concurrent shared
-handler invocation semantics are being expanded in REF-05.
+default. Use one session per bounded recording window. Concurrent invocations
+sharing a handler retain separate trace IDs and parentage.
 
 ## View locally
 
@@ -172,6 +177,12 @@ Direct store writes do not inherit recorder budgets.
 
 ### Durable local recording
 
+Runnable no-network close/reopen example (use a new database path):
+
+```bash
+uv run --no-sync python examples/local_sqlite.py agent.db sqlite-trace.json
+```
+
 ```python
 from langgraph_instrumentation import RecordingSession, SQLiteTraceStore
 
@@ -285,11 +296,18 @@ PERFETTO_TRACE_PROCESSOR=/tmp/trace_processor_shell uv run --no-sync pytest -m p
 The tests themselves never download binaries. They execute real sync/async agents,
 ingest artifacts, and assert slices, counters, flows, and importer error statistics.
 
+Required CI covers minimum, locked and current supported framework versions on
+Python 3.12–3.14, plus clean-wheel no-network graph, Deep Agents and SQLite/CLI
+quickstarts outside the checkout. Free-threaded CPython and other runtimes/platforms
+are not claimed by this matrix. See [release/upgrade notes](CHANGELOG.md),
+[security and artifact handling](SECURITY.md), and the
+[benchmark reproduction and regression budgets](benchmarks/REF04_BASELINE.md).
+
 ## Roadmap and alternatives
 
 See [`EPIC_REFACTOR.md`](EPIC_REFACTOR.md) and [epic #13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 Local SQLite, explicit graph links, bounded recording and modern agent e2e are
-implemented. Release hardening follows. CPU/RSS counters, profiler correlation, and
+implemented. CPU/RSS counters, profiler correlation, and
 OpenTelemetry monitoring are lower-priority opt-in follow-ups, not core requirements.
 
 For broader monitoring now, evaluate [OpenInference](https://github.com/Arize-ai/openinference)

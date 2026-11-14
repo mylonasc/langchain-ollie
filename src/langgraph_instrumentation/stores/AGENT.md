@@ -26,7 +26,11 @@ packages, or optional observability SDKs.
 
 ## Implementations
 
-Every implementation, including SQLite in REF-07, must run
+Every implementation (memory and SQLite v1) must run
 the reusable store contract tests. Durable stores must use transactions for
 multi-record changes, document isolation and retry behavior, version schema
 migrations, and avoid exposing database-specific objects through public APIs.
+
+SQLite recovery requires explicit stopped-writer ownership. Never run it on normal
+read/open. Exact span start/completion replays are idempotent; appends are not
+retried after ambiguous acknowledgements. CLI inspection is read-only.

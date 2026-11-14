@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         python: ['3.12', '3.13', '3.14']
-        dependencies: [locked, current]
+        dependencies: [minimum, locked, current]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -28,6 +28,9 @@ jobs:
         if: matrix.dependencies == 'current'
         run: uv lock --upgrade
       - run: uv sync --locked --group dev --group agents
+      - name: Pin minimum supported framework versions
+        if: matrix.dependencies == 'minimum'
+        run: uv pip install 'langchain-core==1.8.0' 'langgraph==1.2.21' 'deepagents==0.7.38'
       - run: uv run --no-sync ruff check .
       - run: uv run --no-sync ruff format --check .
       - run: uv run --no-sync ty check
@@ -41,9 +44,13 @@ jobs:
           cd /tmp
           /tmp/wheel-smoke/bin/python -c 'import langgraph_instrumentation'
           uv pip install --python /tmp/wheel-smoke/bin/python 'langgraph>=1.2.21,<1.3'
-          /tmp/wheel-smoke/bin/python "$GITHUB_WORKSPACE/examples/local_agent.py" /tmp/wheel-trace.json
           uv pip install --python /tmp/wheel-smoke/bin/python 'deepagents>=0.7.38,<0.8'
-          /tmp/wheel-smoke/bin/python "$GITHUB_WORKSPACE/examples/local_deep_agent.py" /tmp/wheel-deep-agent-trace.json
+          if [[ '${{ matrix.dependencies }}' == 'minimum' ]]; then
+            uv pip install --python /tmp/wheel-smoke/bin/python 'langchain-core==1.8.0' 'langgraph==1.2.21' 'deepagents==0.7.38'
+          fi
+          mkdir /tmp/wheel-work
+          cd /tmp/wheel-work
+          /tmp/wheel-smoke/bin/python "$GITHUB_WORKSPACE/scripts/wheel_smoke.py" "$GITHUB_WORKSPACE"
   perfetto:
     runs-on: ubuntu-latest
     timeout-minutes: 10
