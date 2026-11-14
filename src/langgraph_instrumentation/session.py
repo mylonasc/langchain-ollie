@@ -42,6 +42,7 @@ class RecordingSession:
         limits: RecordingLimits | None = None,
         service_name: str = "local-agent",
         strict: bool = False,
+        capture_streaming_tokens: bool = False,
     ) -> None:
         self._limits = limits or RecordingLimits()
         self._strict = strict
@@ -65,6 +66,7 @@ class RecordingSession:
             capture=capture,
             redaction=redaction,
             raise_error=strict,
+            capture_streaming_tokens=capture_streaming_tokens,
         )
         self._finished: tuple[TraceBundle, ...] | None = None
         self._closed = False
@@ -82,6 +84,7 @@ class RecordingSession:
     def snapshot(self) -> tuple[TraceBundle, ...]:
         if self._finished is not None:
             return self._finished
+        self.recorder.expire_spans()
         result = []
         for summary in self._store.list_traces(TraceQuery(limit=self._limits.max_spans)):
             bundle = self._store.get_trace(summary.trace_id)

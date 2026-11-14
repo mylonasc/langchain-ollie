@@ -24,6 +24,9 @@ class _TraceState:
     trace: Trace
     spans: dict[SpanId, Span] = field(default_factory=dict)
     metrics: list[MetricPoint] = field(default_factory=list)
+    events: dict[SpanId, list[SpanEvent]] = field(default_factory=dict)
+    active_count: int = 0
+    latest_end: int = 0
 
 
 class MemoryTraceStore:
@@ -79,6 +82,7 @@ class MemoryTraceStore:
             if span.parent_span_id is not None and span.parent_span_id not in state.spans:
                 raise ValueError(f"parent span does not exist: {span.parent_span_id}")
             state.spans[span.span_id] = span
+            state.active_count += 1
             if state.trace.end_time_unix_ns is not None:
                 state.trace = replace(state.trace, end_time_unix_ns=None)
 
@@ -91,7 +95,9 @@ class MemoryTraceStore:
                 raise ValueError(f"span does not exist: {event.span_id}")
             if span.is_finished:
                 raise ValueError(f"span is already complete: {event.span_id}")
-            state.spans[event.span_id] = replace(span, events=(*span.events, event))
+            if event.time_monotonic_ns < span.start_time_monotonic_ns:
+                raise ValueError("event cannot precede span")
+            state.events.setdefault(event.span_id, []).append(event)
 
     def record_metric(self, metric: MetricPoint) -> None:
         with self._lock:
@@ -116,12 +122,17 @@ class MemoryTraceStore:
                 raise ValueError(f"span is already complete: {span.span_id}")
             if not _same_started_span(active, span):
                 raise ValueError(f"completed span conflicts with its start: {span.span_id}")
-            if active.events != span.events:
+            recorded = replace(
+                active, events=(*active.events, *state.events.get(span.span_id, ()))
+            ).events
+            if recorded != span.events:
                 raise ValueError("completed span events differ from recorded events")
             state.spans[span.span_id] = span
-            if all(item.is_finished for item in state.spans.values()):
-                end_time = max(item.end_time_unix_ns or 0 for item in state.spans.values())
-                state.trace = replace(state.trace, end_time_unix_ns=end_time)
+            state.events.pop(span.span_id, None)
+            state.active_count -= 1
+            state.latest_end = max(state.latest_end, span.end_time_unix_ns or 0)
+            if state.active_count == 0:
+                state.trace = replace(state.trace, end_time_unix_ns=state.latest_end)
 
     def get_trace(self, trace_id: TraceId) -> TraceBundle | None:
         with self._lock:
@@ -129,7 +140,13 @@ class MemoryTraceStore:
             state = self._traces.get(trace_id)
             if state is None:
                 return None
-            return TraceBundle(state.trace, tuple(state.spans.values()), tuple(state.metrics))
+            spans = tuple(
+                replace(span, events=(*span.events, *state.events[span.span_id]))
+                if span.span_id in state.events
+                else span
+                for span in state.spans.values()
+            )
+            return TraceBundle(state.trace, spans, tuple(state.metrics))
 
     def list_traces(self, query: TraceQuery | None = None) -> tuple[TraceSummary, ...]:
         with self._lock:

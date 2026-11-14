@@ -57,6 +57,7 @@ def _safe_callback(callback: Callable[..., Any]) -> Callable[..., Any]:
 
 
 class _Recorder(Protocol):
+    def observe_token(self, correlation_id: str) -> None: ...
     def start_span(
         self,
         correlation_id: str,
@@ -213,6 +214,9 @@ class LangGraphCallbackHandler(BaseCallbackHandler):
         tags: list[str] | None = None,
         **kwargs: Any,
     ) -> Any:
+        self._invoke(
+            "observe streaming chunk", self._recorder.observe_token, self._correlation_id(run_id)
+        )
         if not self._capture_streaming_tokens:
             return None
         attributes = {"token": self._capture.capture(token, redaction=self._redaction)}

@@ -97,12 +97,34 @@ and a maximum depth of 64. `full()` disables the smaller bounded-mode collection
 string limits, not these safety budgets. Truncation/budget markers are explicit.
 
 Default lifetime recorder budgets: 4,096 spans, 8,192 events, 4,096 metric points,
-256 lanes, and 16 KiB per attribute mapping. Names/IDs are bounded. Completion is
+256 lanes, and 16 KiB per attribute mapping. Aggregate encoded attributes are
+capped at 8 MiB globally and 2 MiB per trace, including repeated completion data
+(conservative charging). Structural record counts/names bound additional Python
+overhead; these are not exact RSS limits. Per-trace caps are 2,048 spans, 4,096
+events, and 2,048 metrics; each span retains at most 128 detailed events. At most
+128 spans may be active. Names/IDs are bounded. Completion is
 not denied when admission is exhausted. The memory store retains up to 128 traces,
 evicting only finalized traces. Start a new session to replenish admission budgets.
 `recording.diagnostics` returns loss observations, including store retention;
 nonzero means incomplete
-recording, including track/lane fallback. REF-04 adds pressure-aware retention.
+recording, including track/lane fallback. Attributes/events are dropped before
+structure; admission never evicts active traces. Completed numeric budget ledgers
+stay bounded by lifetime span admission so late children cannot reset a budget.
+Span payloads leave active state at completion; context caches retain only headers.
+
+Spans older than ten minutes are cooperatively abandoned on new admission,
+stream-chunk observation, snapshot, or explicit `recorder.expire_spans()`. There is
+no background expiration thread: idle recorders are maintained when accessed or
+closed. Configure `max_span_age_ns` for longer operations. Late ends of expired
+spans are harmless; loss and abandoned status remain visible.
+
+Streaming records first/last chunk offsets and chunk counts in `llm.streaming`
+without retaining text. These are callback chunks, not tokenizer token counts.
+`RecordingSession(capture_streaming_tokens=True)` additionally retains detailed
+events under the same global/per-trace/per-span budgets. Actual provider usage is
+still taken from the final model response exactly once. See
+[`benchmarks/REF04_BASELINE.md`](benchmarks/REF04_BASELINE.md) for overhead and
+regression thresholds.
 
 Direct recorder/store calls take trusted JSON and safe operation/resource identity,
 not arbitrary application payloads. Apply capture policy before that boundary.

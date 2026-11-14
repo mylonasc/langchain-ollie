@@ -67,6 +67,9 @@ class _ActiveSpan:
     trace: Trace
     span: Span
     events: list[SpanEvent]
+    chunks: int = 0
+    first_chunk_ns: int | None = None
+    last_chunk_ns: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +77,7 @@ class _SpanContext:
     trace: Trace
     span_id: SpanId
     execution_lane: ExecutionLane | None
+    status: SpanStatus
 
     @property
     def trace_id(self) -> TraceId:
@@ -144,7 +148,17 @@ class TraceRecorder:
         self._shutdown_timeout = shutdown_timeout
         self._completed_context_cache_size = completed_context_cache_size
         self._limits = limits or RecordingLimits()
+        self._attribute_sanitizer = Sanitizer(
+            max_payload_bytes=self._limits.max_attribute_bytes,
+            max_depth=64,
+            max_string_length=None,
+            max_collection_items=None,
+            max_byte_length=None,
+            redaction=RedactionPolicy(keys=frozenset()),
+        )
         self._counts = {"spans": 0, "events": 0, "metrics": 0}
+        self._trace_counts: dict[TraceId, dict[str, int]] = {}
+        self._attribute_bytes = 0
         self._dropped = {
             "spans": 0,
             "events": 0,
@@ -153,6 +167,9 @@ class TraceRecorder:
             "lanes": 0,
             "destination_failures": 0,
             "lifecycle": 0,
+            "bytes": 0,
+            "active_spans": 0,
+            "expired_spans": 0,
         }
         _validate_nonempty_string(service_name, "service_name")
         self._service_name = service_name[:256]
@@ -189,17 +206,11 @@ class TraceRecorder:
     ) -> Attributes:
         # Direct callers provide trusted JSON values. This is a safety budget,
         # not a substitute for adapter payload capture/redaction configuration.
-        result = Sanitizer(
-            max_payload_bytes=self._limits.max_attribute_bytes,
-            max_depth=64,
-            max_string_length=None,
-            max_collection_items=None,
-            max_byte_length=None,
-            redaction=RedactionPolicy(keys=frozenset()),
-        ).sanitize(attributes or {})
+        result = self._attribute_sanitizer.sanitize(attributes or {})
         if isinstance(result, dict):
+            encoded = json.dumps(result)
             if count_loss and any(
-                marker in json.dumps(result)
+                marker in encoded
                 for marker in (
                     "<truncated",
                     "<max-depth>",
@@ -221,6 +232,28 @@ class TraceRecorder:
             return False
         return True
 
+    def _trace_admit(self, trace_id: TraceId, kind: str) -> bool:
+        counts = self._trace_counts.setdefault(
+            trace_id, {"spans": 0, "events": 0, "metrics": 0, "bytes": 0}
+        )
+        if counts[kind] >= getattr(self._limits, f"max_trace_{kind}"):
+            self._dropped[kind] += 1
+            return False
+        return True
+
+    def _charge_attributes(self, trace_id: TraceId, attributes: Attributes) -> Attributes:
+        size = len(json.dumps(dict(attributes), separators=(",", ":"), ensure_ascii=True).encode())
+        counts = self._trace_counts[trace_id]
+        if (
+            self._attribute_bytes + size > self._limits.max_total_attribute_bytes
+            or counts["bytes"] + size > self._limits.max_trace_attribute_bytes
+        ):
+            self._dropped["bytes"] += 1
+            return {}  # structural fields remain; the recording's loss summary is authoritative
+        self._attribute_bytes += size
+        counts["bytes"] += size
+        return attributes
+
     def start_span(
         self,
         correlation_id: str,
@@ -235,6 +268,7 @@ class TraceRecorder:
     ) -> Span | None:
         """Start a root or child span and return its immutable active snapshot."""
         _validate_correlation_id(correlation_id)
+        self.expire_spans()
         if parent_correlation_id is not None:
             _validate_correlation_id(parent_correlation_id, "parent_correlation_id")
             if trace_name is not None:
@@ -262,6 +296,9 @@ class TraceRecorder:
             with self._condition:
                 if not self._admit("spans"):
                     return None
+                if len(self._active) >= self._limits.max_active_spans:
+                    self._dropped["active_spans"] += 1
+                    return None
                 reading = self._clock.now()
                 trace_id = (
                     parent.trace_id if parent is not None else self._id_generator.new_trace_id()
@@ -278,6 +315,8 @@ class TraceRecorder:
                     )
                 )
                 lane = self._resolve_lane(lane_id, lane_name, parent)
+                if not self._trace_admit(trace_id, "spans"):
+                    return None
                 span = Span(
                     trace_id=trace_id,
                     span_id=self._id_generator.new_span_id(),
@@ -286,11 +325,15 @@ class TraceRecorder:
                     kind=kind,
                     start_time_unix_ns=reading.unix_time_ns,
                     start_time_monotonic_ns=reading.monotonic_time_ns,
-                    attributes=self._bounded_attributes(attributes),
+                    attributes=self._charge_attributes(
+                        trace_id, self._bounded_attributes(attributes)
+                    ),
                     execution_lane=lane,
                 )
             succeeded = self._store_start_span(trace, span) if self._store else True
             if not succeeded:
+                if self._trace_counts[trace_id]["spans"] == 0:
+                    self._trace_counts.pop(trace_id, None)
                 if self._strict:
                     raise RecorderError("failed to start span")
                 return None
@@ -298,6 +341,7 @@ class TraceRecorder:
                 self._lanes.setdefault(lane.lane_id, lane)
                 self._active[correlation_id] = _ActiveSpan(correlation_id, trace, span, [])
                 self._counts["spans"] += 1
+                self._trace_counts[trace_id]["spans"] += 1
                 self._generation += 1
             return span
 
@@ -323,6 +367,11 @@ class TraceRecorder:
             with self._condition:
                 if not self._admit("events"):
                     return None
+                if not self._trace_admit(active.span.trace_id, "events"):
+                    return None
+                if len(active.events) >= self._limits.max_span_events:
+                    self._dropped["events"] += 1
+                    return None
                 reading = self._clock.now()
                 event = SpanEvent(
                     trace_id=active.span.trace_id,
@@ -330,7 +379,9 @@ class TraceRecorder:
                     name=name[:256],
                     time_unix_ns=reading.unix_time_ns,
                     time_monotonic_ns=reading.monotonic_time_ns,
-                    attributes=self._bounded_attributes(attributes),
+                    attributes=self._charge_attributes(
+                        active.span.trace_id, self._bounded_attributes(attributes)
+                    ),
                 )
             succeeded = (
                 self._store_call("record event", self._store.record_event, event)
@@ -344,6 +395,7 @@ class TraceRecorder:
             with self._condition:
                 active.events.append(event)
                 self._counts["events"] += 1
+                self._trace_counts[active.span.trace_id]["events"] += 1
                 self._generation += 1
             return event
 
@@ -371,6 +423,8 @@ class TraceRecorder:
             with self._condition:
                 if not self._admit("metrics"):
                     return None
+                if not self._trace_admit(active.span.trace_id, "metrics"):
+                    return None
                 reading = self._clock.now()
                 metric = MetricPoint(
                     trace_id=active.span.trace_id,
@@ -379,7 +433,9 @@ class TraceRecorder:
                     time_unix_ns=reading.unix_time_ns,
                     time_monotonic_ns=reading.monotonic_time_ns,
                     values=self._bounded_metric_values(values),
-                    attributes=self._bounded_attributes(attributes),
+                    attributes=self._charge_attributes(
+                        active.span.trace_id, self._bounded_attributes(attributes)
+                    ),
                 )
                 totals_key: tuple[TraceId, str] | None = None
                 updated: dict[str, int | float] | None = None
@@ -410,6 +466,7 @@ class TraceRecorder:
                 if totals_key is not None and updated is not None:
                     self._metric_totals[totals_key] = updated
                 self._counts["metrics"] += 1
+                self._trace_counts[active.span.trace_id]["metrics"] += 1
                 self._generation += 1
             return metric
 
@@ -434,6 +491,9 @@ class TraceRecorder:
             with self._condition:
                 active = self._active.get(correlation_id)
             if active is None:
+                context = self._completed_contexts.get(correlation_id)
+                if context is not None and context.status is SpanStatus.ABANDONED:
+                    return None
                 return self._lifecycle_failure(
                     f"cannot end unknown or completed span: {correlation_id!r}"
                 )
@@ -465,6 +525,65 @@ class TraceRecorder:
         finally:
             self._finish_processor_call(token)
         return completed
+
+    def observe_token(self, correlation_id: str) -> None:
+        """Count callback chunks without retaining text or writing per-token records."""
+        self.expire_spans()
+
+        def operation() -> None:
+            with self._condition:
+                active = self._active.get(correlation_id)
+                if active is None:
+                    return
+                now = self._clock.now().monotonic_time_ns
+                active.chunks += 1
+                if active.first_chunk_ns is None:
+                    active.first_chunk_ns = now
+                active.last_chunk_ns = now
+
+        self._ordered_lifecycle(operation, "observe a streaming chunk")
+
+    def expire_spans(self) -> int:
+        """Cooperative maintenance on admission/snapshot/token callbacks; no worker thread."""
+
+        def operation() -> list[tuple[Span, int]]:
+            with self._condition:
+                now = self._clock.now().monotonic_time_ns
+                expired = sorted(
+                    (
+                        a
+                        for a in self._active.values()
+                        if now - a.span.start_time_monotonic_ns >= self._limits.max_span_age_ns
+                    ),
+                    key=lambda a: self._active_depth(a.span),
+                    reverse=True,
+                )
+            completed = []
+            for active in expired:
+                span = self._complete(active, SpanStatus.ABANDONED, "span expired", None)
+                if self._store and not self._store_call(
+                    "expire span", self._store.complete_span, span
+                ):
+                    continue
+                with self._condition:
+                    del self._active[active.correlation_id]
+                    self._retain_completed_context(active.correlation_id, active.trace, span)
+                    self._release_trace_if_inactive(span.trace_id)
+                    self._dropped["expired_spans"] += 1
+                    self._generation += 1
+                    completed.append((span, self._begin_processor_call()))
+            return completed
+
+        with self._condition:
+            if self._closing or self._closed or not self._active:
+                return 0
+        result = self._ordered_lifecycle(operation, "expire spans") or []
+        for span, token in result:
+            try:
+                self._dispatch_processors(span)
+            finally:
+                self._finish_processor_call(token)
+        return len(result)
 
     def force_flush(self, timeout: float | None = None) -> bool:
         """Establish a quiescence barrier and cooperatively flush destinations."""
@@ -637,6 +756,7 @@ class TraceRecorder:
                     self._completed_contexts.clear()
                     self._metric_totals.clear()
                     self._lanes.clear()
+                    self._trace_counts.clear()
                     self._operations.clear()
                     self._closed = True
                 self._closing = False
@@ -730,6 +850,14 @@ class TraceRecorder:
         merged_attributes = dict(active.span.attributes)
         if attributes is not None:
             merged_attributes.update(self._bounded_attributes(attributes, count_loss=False))
+        if active.chunks:
+            merged_attributes["llm.streaming"] = {
+                "chunks": active.chunks,
+                "first_chunk_offset_ns": (active.first_chunk_ns or 0)
+                - active.span.start_time_monotonic_ns,
+                "last_chunk_offset_ns": (active.last_chunk_ns or 0)
+                - active.span.start_time_monotonic_ns,
+            }
         return replace(
             active.span,
             end_time_unix_ns=max(reading.unix_time_ns, active.span.start_time_unix_ns),
@@ -738,7 +866,9 @@ class TraceRecorder:
             ),
             status=status,
             status_description=description[:256] if description else None,
-            attributes=self._bounded_attributes(merged_attributes),
+            attributes=self._charge_attributes(
+                active.span.trace_id, self._bounded_attributes(merged_attributes)
+            ),
             events=tuple(active.events),
         )
 
@@ -986,7 +1116,7 @@ def _validate_correlation_id(value: str, field_name: str = "correlation_id") -> 
 
 
 def _context_from_span(trace: Trace, span: Span) -> _SpanContext:
-    return _SpanContext(trace, span.span_id, span.execution_lane)
+    return _SpanContext(trace, span.span_id, span.execution_lane, span.status)
 
 
 def _validate_nonempty_string(value: str, field_name: str) -> None:

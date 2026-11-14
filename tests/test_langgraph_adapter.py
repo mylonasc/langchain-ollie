@@ -17,6 +17,9 @@ from langgraph_instrumentation import (
 
 
 class FakeRecorder:
+    def observe_token(self, correlation_id: str) -> None:
+        pass
+
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
 

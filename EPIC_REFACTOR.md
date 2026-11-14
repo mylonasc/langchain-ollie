@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-- Status: in progress on `epic-refactor`; REF-01 through REF-03 complete, REF-04 next.
+- Status: in progress on `epic-refactor`; REF-01 through REF-04 complete, REF-05 next.
 - Parent issue: [#13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 - Primary outcome: safe, bounded, offline LangGraph and Deep Agents execution
   traces that can be inspected in Perfetto without a service or credentials.
@@ -162,7 +162,18 @@ stable and may become child issues later; this parent initially tracks the slice
   1.2.22 versus locked 1.2.21). No provider credentials, network or shell tools are
   used by the scenarios. CI now smoke-tests both installed-wheel examples.
   Example: `uv run --no-sync python examples/local_deep_agent.py deep-agent-trace.json`.
-  REF-04 pressure/efficiency acceptance remains outstanding; M2 is not yet complete.
+  This slice's initial evidence preceded REF-04; M2 is now complete below.
+- REF-04: [#17](https://github.com/mylonasc/langgraph_instrumentation/issues/17).
+  Added aggregate/per-trace encoded attribute budgets, per-trace record caps,
+  active/per-span event caps, cooperative expiration, payload-free streaming chunk
+  summaries and capped opt-in detail. Memory events append without rebuilding
+  spans; snapshots/completion freeze and sort once. Stress tests prove bounded
+  retention, expiry and immutable snapshot behavior. Benchmark evidence and review
+  thresholds are in `benchmarks/REF04_BASELINE.md` (event doubling 2.02x; about
+  0.43 ms metadata overhead per minimal graph in this local baseline).
+  Verification: 192 default tests and six Perfetto tests pass; lint/format/types
+  and wheel/sdist build pass. Prior slices are pushed; hosted CI for REF-03 passed
+  at https://github.com/mylonasc/langgraph_instrumentation/actions/runs/43575876930.
 
 ### Useful-state checkpoints
 
@@ -495,7 +506,7 @@ Test infrastructure rules:
 - [x] REF-01 — Safety, scope, regression foundation, CI (#14)
 - [x] REF-02 — Modern LangGraph-to-Perfetto MVP; legacy removal (M1, #15)
 - [x] REF-03 — Real Deep Agents e2e and demo (#16)
-- [ ] REF-04 — Bounded efficient recording (M2 with REF-03)
+- [x] REF-04 — Bounded efficient recording (M2 with REF-03, #17)
 - [ ] REF-05 — Graph/concurrency/retry/resume semantics
 - [ ] REF-06 — Failure isolation and lifecycle (M3 with REF-05)
 - [ ] REF-07 — SQLite durability and reopen
