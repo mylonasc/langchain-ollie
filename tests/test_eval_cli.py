@@ -193,6 +193,89 @@ def test_validate_accepts_and_rejects(tmp_path: Path, capsys: Any) -> None:
     assert evals_main(["validate", str(bad)]) == 1
     assert json.loads(capsys.readouterr().out)["valid"] is False
 
+    duplicate = tmp_path / "duplicate.json"
+    duplicate.write_text(
+        json.dumps(
+            {
+                "schema_version": "1",
+                "kind": "langgraph_instrumentation.eval_dataset",
+                "cases": [
+                    {
+                        "case_id": "same",
+                        "name": None,
+                        "description": None,
+                        "tags": [],
+                        "metadata": {},
+                        "turns": [
+                            {
+                                "input": None,
+                                "messages": [["user", "x"]],
+                                "checks": [],
+                                "metadata": {},
+                                "tags": [],
+                                "timeout_seconds": None,
+                            }
+                        ],
+                        "checks": [],
+                    },
+                    {
+                        "case_id": "same",
+                        "name": None,
+                        "description": None,
+                        "tags": [],
+                        "metadata": {},
+                        "turns": [
+                            {
+                                "input": None,
+                                "messages": [["user", "y"]],
+                                "checks": [],
+                                "metadata": {},
+                                "tags": [],
+                                "timeout_seconds": None,
+                            }
+                        ],
+                        "checks": [],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert evals_main(["validate", str(duplicate)]) == 1
+    assert "duplicate case_id" in json.loads(capsys.readouterr().out)["error"]
+
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text(
+        json.dumps(
+            {
+                "schema_version": "1",
+                "kind": "langgraph_instrumentation.eval_dataset",
+                "cases": [
+                    {
+                        "case_id": "broken",
+                        "name": None,
+                        "description": None,
+                        "tags": [],
+                        "metadata": {},
+                        "turns": [
+                            {
+                                "input": None,
+                                "messages": [],
+                                "checks": [],
+                                "metadata": {},
+                                "tags": [],
+                                "timeout_seconds": None,
+                            }
+                        ],
+                        "checks": [],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert evals_main(["validate", str(malformed)]) == 1
+
     assert evals_main(["validate", str(tmp_path / "missing.json")]) == 2
 
 
