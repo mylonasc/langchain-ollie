@@ -32,6 +32,7 @@ def test_public_api_is_explicit() -> None:
         "SpanLink",
         "SpanProcessor",
         "SpanStatus",
+        "SQLiteTraceStore",
         "SystemClock",
         "TokenUsage",
         "Trace",
@@ -46,7 +47,12 @@ def test_public_api_is_explicit() -> None:
 
 
 def test_store_api_is_explicit() -> None:
-    assert stores.__all__ == ["FlushableTraceStore", "MemoryTraceStore", "TraceStore"]
+    assert stores.__all__ == [
+        "FlushableTraceStore",
+        "MemoryTraceStore",
+        "SQLiteTraceStore",
+        "TraceStore",
+    ]
 
 
 def test_adapter_api_is_explicit() -> None:

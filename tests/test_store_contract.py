@@ -11,6 +11,7 @@ from langgraph_instrumentation import (
     SpanId,
     SpanKind,
     SpanStatus,
+    SQLiteTraceStore,
     Trace,
     TraceId,
     TraceQuery,
@@ -20,9 +21,21 @@ from langgraph_instrumentation import (
 StoreFactory = Callable[[], TraceStore]
 
 
-@pytest.fixture(params=[MemoryTraceStore], ids=["memory"])
-def store_factory(request: pytest.FixtureRequest) -> StoreFactory:
-    return request.param
+@pytest.fixture(params=["memory", "sqlite"])
+def store_factory(request: pytest.FixtureRequest, tmp_path) -> StoreFactory:
+    created = []
+
+    def factory():
+        store = (
+            MemoryTraceStore()
+            if request.param == "memory"
+            else SQLiteTraceStore(tmp_path / f"{len(created)}.db")
+        )
+        created.append(store)
+        request.addfinalizer(store.close)
+        return store
+
+    return factory
 
 
 def make_trace(value: int = 1, *, start: int = 100, service: str = "test") -> Trace:

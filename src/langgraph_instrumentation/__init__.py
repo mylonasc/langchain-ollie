@@ -36,7 +36,7 @@ from .policies import (
 )
 from .recorder import RecorderError, SpanProcessor, TraceRecorder
 from .session import RecordingSession
-from .stores import FlushableTraceStore, MemoryTraceStore, TraceStore
+from .stores import FlushableTraceStore, MemoryTraceStore, SQLiteTraceStore, TraceStore
 
 __all__ = [
     "Clock",
@@ -67,6 +67,7 @@ __all__ = [
     "SpanLink",
     "SpanProcessor",
     "SpanStatus",
+    "SQLiteTraceStore",
     "SystemClock",
     "TokenUsage",
     "Trace",

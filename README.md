@@ -170,6 +170,47 @@ Direct store writes do not inherit recorder budgets.
 
 ## Lifecycle and ownership
 
+### Durable local recording
+
+```python
+from langgraph_instrumentation import RecordingSession, SQLiteTraceStore
+
+store = SQLiteTraceStore("agent.db")  # new dedicated recording database
+with RecordingSession(store=store) as recording:
+    result = app.invoke(inputs, config={"callbacks": [recording.handler]})
+store.close()
+```
+
+Later, from another process:
+
+```bash
+python -m langgraph_instrumentation list agent.db --limit 20 --offset 0
+python -m langgraph_instrumentation summary agent.db TRACE_ID
+python -m langgraph_instrumentation export agent.db TRACE_ID trace.json
+```
+
+CLI inspection uses read-only connections. The store uses versioned schema v1,
+foreign-key cascades, WAL, FULL synchronization, per-operation transactions and a
+two-second busy timeout. One connection is serialized across threads; independent
+connections coordinate through SQLite. It stores neutral records, links, resource
+identity, events and metrics, not Perfetto dictionaries. Session loss diagnostics
+persist on orderly close. `TraceQuery(limit=..., offset=...)` bounds listing reads;
+`delete_traces(before_unix_ns=...)` retains active traces and deletes whole finalized
+traces. Exact start/completion replays are idempotent. No silent migration of an
+unknown schema or unrelated unversioned database is attempted.
+
+After a crashed writer, normal open preserves unfinished spans. **Only after all
+previous writers have stopped**, opt into `SQLiteTraceStore(path, recover=True)`
+or `python -m langgraph_instrumentation recover agent.db`. Recovery marks work
+abandoned and flags its duration as a last-observed lower bound; it never treats
+offline downtime as execution or guesses that another live writer is dead.
+Do not reuse a nonempty database with a new `RecordingSession`; reopen it for
+query/export, or start a new recording file. Database retention/rotation is caller
+controlled. Prefer memory capture when minimizing callback I/O overhead; durable
+SQLite commits have a real latency cost.
+
+### Session resource ownership
+
 The session owns and closes its default memory store. A supplied `store=` must be
 empty and dedicated to this recording; it remains open after session shutdown.
 Session snapshots are immutable, and its final snapshot remains exportable after
@@ -247,8 +288,8 @@ ingest artifacts, and assert slices, counters, flows, and importer error statist
 ## Roadmap and alternatives
 
 See [`EPIC_REFACTOR.md`](EPIC_REFACTOR.md) and [epic #13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
-SQLite, graph dependency links, bounded hot-path improvements and release hardening
-follow the initial local workflow. CPU/RSS counters, profiler correlation, and
+Local SQLite, explicit graph links, bounded recording and modern agent e2e are
+implemented. Release hardening follows. CPU/RSS counters, profiler correlation, and
 OpenTelemetry monitoring are lower-priority opt-in follow-ups, not core requirements.
 
 For broader monitoring now, evaluate [OpenInference](https://github.com/Arize-ai/openinference)

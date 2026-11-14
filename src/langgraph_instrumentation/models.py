@@ -497,6 +497,7 @@ class TraceQuery:
     service_name: str | None = None
     status: SpanStatus | None = None
     limit: int = 100
+    offset: int = 0
 
     def __post_init__(self) -> None:
         if self.status is not None:
@@ -517,6 +518,8 @@ class TraceQuery:
             raise TypeError("limit must be an integer")
         if self.limit <= 0:
             raise ValueError("limit must be greater than zero")
+        if type(self.offset) is not int or self.offset < 0:
+            raise ValueError("offset must be a nonnegative integer")
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
@@ -525,6 +528,7 @@ class TraceQuery:
             "service_name": self.service_name,
             "status": self.status.value if self.status else None,
             "limit": self.limit,
+            "offset": self.offset,
         }
 
     @classmethod
@@ -536,6 +540,7 @@ class TraceQuery:
             service_name=_optional_string(data, "service_name"),
             status=(_enum_from_value(SpanStatus, status, "status") if status is not None else None),
             limit=_required_integer(data, "limit"),
+            offset=_optional_integer(data, "offset") or 0,
         )
 
 

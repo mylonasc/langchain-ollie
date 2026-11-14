@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import threading
 from dataclasses import dataclass, field, replace
 
@@ -17,6 +16,7 @@ from ..models import (
     TraceQuery,
     TraceSummary,
 )
+from ._validation import _active_trace, _same_started_span, _validate_timeout
 
 
 @dataclass(slots=True)
@@ -162,7 +162,7 @@ class MemoryTraceStore:
             summaries = [self._summary(state) for state in self._traces.values()]
         matching = [summary for summary in summaries if _matches(summary, query)]
         matching.sort(key=lambda item: (item.start_time_unix_ns, item.trace_id.value), reverse=True)
-        return tuple(matching[: query.limit])
+        return tuple(matching[query.offset : query.offset + query.limit])
 
     def delete_trace(self, trace_id: TraceId) -> bool:
         with self._lock:
@@ -236,25 +236,6 @@ class MemoryTraceStore:
         )
 
 
-def _active_trace(trace: Trace) -> Trace:
-    return trace if trace.end_time_unix_ns is None else replace(trace, end_time_unix_ns=None)
-
-
-def _same_started_span(active: Span, completed: Span) -> bool:
-    return (
-        replace(
-            completed,
-            end_time_unix_ns=None,
-            end_time_monotonic_ns=None,
-            status=SpanStatus.UNSET,
-            status_description=None,
-            attributes=active.attributes,
-            events=active.events,
-        )
-        == active
-    )
-
-
 def _trace_status(state: _TraceState) -> SpanStatus:
     if state.trace.end_time_unix_ns is None:
         return SpanStatus.UNSET
@@ -277,12 +258,3 @@ def _matches(summary: TraceSummary, query: TraceQuery) -> bool:
     if query.service_name is not None and summary.service_name != query.service_name:
         return False
     return query.status is None or summary.status is query.status
-
-
-def _validate_timeout(timeout: float | None) -> None:
-    if timeout is None:
-        return
-    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
-        raise TypeError("timeout must be a number or None")
-    if not math.isfinite(timeout) or timeout < 0:
-        raise ValueError("timeout must be finite and non-negative")

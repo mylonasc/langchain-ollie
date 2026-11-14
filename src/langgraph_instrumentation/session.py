@@ -29,6 +29,11 @@ class _StoreDiagnostics(Protocol):
     def diagnostics(self) -> dict[str, int]: ...
 
 
+@runtime_checkable
+class _WritableDiagnostics(Protocol):
+    def record_diagnostics(self, values: dict[str, int]) -> None: ...
+
+
 class RecordingSession:
     """Record explicitly attached callbacks; snapshots/export remain usable after close.
 
@@ -129,12 +134,22 @@ class RecordingSession:
             if self._closed:
                 return self._close_result
             self._finalizing_thread = threading.get_ident()
+            diagnostics_ok = True
             if self._finished is None:
-                self._finished = self.snapshot()
+                finished = self.snapshot()
+                if isinstance(self._store, _WritableDiagnostics):
+                    try:
+                        self._store.record_diagnostics(self.recorder.diagnostics)
+                    except Exception:
+                        diagnostics_ok = False
+                        self.recorder._destination_failure("persist recording diagnostics")
+                        if self._strict:
+                            raise
+                self._finished = finished
                 self._finished_diagnostics = self.diagnostics
             store_ok = self._store.close(remaining) if self._owns_store else True
             self._closed = store_ok
-            self._close_result = recorder_ok and store_ok
+            self._close_result = recorder_ok and store_ok and diagnostics_ok
             return self._close_result
         finally:
             self._finalizing_thread = None

@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-- Status: in progress on `epic-refactor`; REF-01 through REF-06 complete, REF-07 next.
+- Status: in progress on `epic-refactor`; REF-01 through REF-07 complete, REF-08 next.
 - Parent issue: [#13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 - Primary outcome: safe, bounded, offline LangGraph and Deep Agents execution
   traces that can be inspected in Perfetto without a service or credentials.
@@ -198,6 +198,15 @@ stable and may become child issues later; this parent initially tracks the slice
   and cancellation inside an async tool. Verification: 212 default tests, seven
   importer tests and lint/format/types/build pass; no application-error replacement
   or payload-bearing failure logs. M3 is delivered with REF-05.
+
+- REF-07: [#20](https://github.com/mylonasc/langgraph_instrumentation/issues/20).
+  Transactional SQLite schema v1 stores neutral records, links, resources and loss
+  diagnostics with WAL/FULL sync, bounded listing, retention and read-only CLI.
+  Explicit stopped-writer recovery marks abandoned lower-bound durations. Shared
+  store contracts, process exit/reopen, disk-full/locked/rollback/schema mismatch,
+  cascade cleanup and diagnostic-failure tests pass. Real sync/async LangGraph and
+  Deep Agents recordings reopen identically and import into Perfetto.
+  Verification: 232 default tests, 11 importer tests, lint/format/types and build.
 
 ### Useful-state checkpoints
 
@@ -533,7 +542,7 @@ Test infrastructure rules:
 - [x] REF-04 — Bounded efficient recording (M2 with REF-03, #17)
 - [x] REF-05 — Graph/concurrency/retry/resume semantics (#18)
 - [x] REF-06 — Failure isolation and lifecycle (M3 with REF-05, #19)
-- [ ] REF-07 — SQLite durability and reopen
+- [x] REF-07 — SQLite durability and reopen (#20)
 - [ ] REF-08 — Local-first release (M4; core epic complete)
 - [ ] REF-09 — Optional CPU/RSS sampling
 - [ ] REF-10 — Optional sampling-profiler interoperability / go-no-go
