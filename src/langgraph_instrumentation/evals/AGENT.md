@@ -65,5 +65,8 @@ offline HTML report, proposal lifecycle commands and read-only trace resolution.
 `tests/test_eval_inspect.py` covers bounded failure/turn/regression summaries,
 missing-trace reporting and truncation flags.
 `tests/test_eval_proposals.py` covers feedback validation, proposal validation,
-explicit review, golden-dataset application and artifact persistence. Add contract
-tests at the model, adapter, metric or evaluator boundary changed.
+explicit review, golden-dataset application and artifact persistence.
+`tests/test_eval_demo.py` pins the release gate: baseline fails golden budgets,
+optimized passes, reversed comparison regresses. `examples/` holds runnable
+demos with committed versioned datasets; demo scripts exit non-zero on
+violated expectations and write artifacts outside the repo.

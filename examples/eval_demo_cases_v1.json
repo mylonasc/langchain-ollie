@@ -1,0 +1,56 @@
+{
+  "cases": [
+    {
+      "case_id": "capital-lookup",
+      "checks": [],
+      "description": null,
+      "metadata": {},
+      "name": "Multi-turn lookup",
+      "tags": [],
+      "turns": [
+        {
+          "checks": [
+            {
+              "case_sensitive": true,
+              "expected": "Answer: 42",
+              "strip": false,
+              "type": "exact_text"
+            }
+          ],
+          "input": null,
+          "messages": [
+            [
+              "user",
+              "Look up the capital value."
+            ]
+          ],
+          "metadata": {},
+          "tags": [],
+          "timeout_seconds": null
+        },
+        {
+          "checks": [
+            {
+              "case_sensitive": true,
+              "expected": "Confirmed: 42",
+              "strip": false,
+              "type": "exact_text"
+            }
+          ],
+          "input": null,
+          "messages": [
+            [
+              "user",
+              "Confirm it once more."
+            ]
+          ],
+          "metadata": {},
+          "tags": [],
+          "timeout_seconds": null
+        }
+      ]
+    }
+  ],
+  "kind": "langgraph_instrumentation.eval_dataset",
+  "schema_version": "1"
+}

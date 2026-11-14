@@ -185,6 +185,26 @@ uv run --no-sync python -m langgraph_instrumentation evals report run.json --out
 
 See `docs/evals.md` for the artifact schema, CLI reference and exit codes.
 
+### End-to-end demonstration
+
+`examples/eval_demo.py` runs the complete loop offline with scripted models:
+a baseline agent answers correctly but fetches every fact twice; trace evidence
+shows the duplicated `lookup` calls; an external coding-agent step proposes a
+single-fetch regression case through the public API; after explicit review the
+golden dataset grows from `eval_demo_cases_v1.json` to
+`eval_demo_cases_v2.json`; an optimized agent passes the golden suite with
+lower token consumption while answers stay identical.
+
+```bash
+uv run --no-sync python examples/eval_demo.py --out-dir /tmp/eval-demo
+```
+
+Limits: scripted token counts stand in for provider usage, one redundant-fetch
+pattern stands in for real bottlenecks, and the "external agent" step is a
+deterministic script over public interfaces rather than an autonomous loop.
+`tests/test_eval_demo.py` pins the gate: the baseline fails the golden
+budgets, the optimized agent passes, and the reversed comparison regresses.
+
 ### Agent-facing inspection and evaluation workflows
 
 Coding agents work through bounded, read-only summaries that never require

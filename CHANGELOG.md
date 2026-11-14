@@ -27,6 +27,13 @@
   explicit accept/reject review and golden-dataset application that fails on
   silent overwrites. A packaged offline walkthrough uses only public
   interfaces. No MCP server, agent runtime or hosted service is introduced.
+- End-to-end demonstration and release gate: `examples/eval_demo.py` with
+  committed versioned datasets (`eval_demo_cases_v1.json`,
+  `eval_demo_cases_v2.json`) shows a quality-preserving token optimization
+  from duplicated to single-fetch tool calls, driven by trace evidence through
+  public interfaces only. `tests/test_eval_demo.py` fails the baseline on the
+  golden budgets, passes the optimized agent, and rejects the reversed
+  comparison.
 
 ### Upgrade from the prototype
 
