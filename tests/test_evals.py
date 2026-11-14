@@ -21,11 +21,14 @@ from langgraph_instrumentation import (
     LangGraphEvalAdapter,
     MaxMetric,
     MetricCompleteness,
+    RecordingLimits,
+    RecordingSession,
     SpanKind,
     ToolCalled,
     load_cases,
     save_cases,
 )
+from langgraph_instrumentation.resources import ProcessReading, ProcessSampler
 
 
 class EchoApp:
@@ -295,3 +298,170 @@ def test_runner_uses_bounded_capture_by_default(local_agent) -> None:
     ).run([EvalCase(case_id="metadata", turns=(EvalTurn.user("Add 2 and 3"),))])
     assert run.metadata["eval.capture_mode"] == "metadata"
     assert metric(run.trials[0].turns[0].metrics, "tokens.total").value == 8
+
+
+class NodeInterrupt(Exception):
+    """LangGraph-style interruption; the name drives the execution status."""
+
+
+def test_timeout_and_interrupt_map_to_explicit_statuses() -> None:
+    class TimeoutApp:
+        def invoke(self, invocation: Any) -> EvalOutput:
+            raise TimeoutError("deadline exceeded")
+
+    class InterruptApp:
+        def invoke(self, invocation: Any) -> EvalOutput:
+            raise NodeInterrupt("human review requested")
+
+    timeout_run = EvalRunner(TimeoutApp()).run(
+        [EvalCase(case_id="timeout", turns=(EvalTurn.user("one"), EvalTurn.user("two")))]
+    )
+    timeout_trial = timeout_run.trials[0]
+    assert timeout_trial.execution_status.value == "timeout"
+    assert timeout_trial.turns[0].execution_status.value == "timeout"
+    assert timeout_trial.turns[1].execution_status.value == "skipped"
+    assert not timeout_run.passed
+
+    interrupt_run = EvalRunner(InterruptApp()).run(
+        [EvalCase(case_id="interrupt", turns=(EvalTurn.user("one"),))]
+    )
+    interrupt_trial = interrupt_run.trials[0]
+    assert interrupt_trial.execution_status.value == "interrupted"
+    assert interrupt_trial.error is not None
+    assert "NodeInterrupt" in interrupt_trial.error.exception_type
+    assert not interrupt_run.passed
+
+
+class UnclosableSession(RecordingSession):
+    """Simulate a session whose shutdown cannot complete."""
+
+    def close(self, timeout: float | None = None) -> bool:
+        return False
+
+
+def test_unclosable_session_marks_trial_incomplete() -> None:
+    run = EvalRunner(SpanApp(), session_factory=UnclosableSession).run(
+        [EvalCase(case_id="incomplete", turns=(EvalTurn.user("x"),))]
+    )
+    trial = run.trials[0]
+    assert trial.turns[0].execution_status.value == "completed"
+    assert trial.execution_status.value == "incomplete"
+    assert trial.error is not None
+    assert trial.error.exception_type == "RecordingSession.close"
+    assert not trial.passed
+
+
+def test_supplied_environment_is_distinguishable_from_extracted() -> None:
+    run = EvalRunner(LangGraphEvalAdapter(EchoApp())).run(
+        [EvalCase(case_id="env", turns=(EvalTurn.user("x"),))],
+        environment={"git_commit": "abc123", "model.id": "scripted"},
+    )
+    assert run.environment["supplied"] == {"git_commit": "abc123", "model.id": "scripted"}
+    assert "python" in run.environment
+
+
+class TwoTraceApp:
+    """Record two independent root spans, hence two traces, in one turn."""
+
+    def invoke(self, invocation: Any) -> EvalOutput:
+        recorder = invocation.session.recorder
+        for name in ("Graph: first", "Graph: second"):
+            correlation = uuid4().hex
+            recorder.start_span(
+                correlation, name, SpanKind.GRAPH, attributes={"ls_integration": "langgraph"}
+            )
+            recorder.end_span(correlation)
+        return EvalOutput(text="ok")
+
+
+def test_multiple_traces_in_one_turn_aggregate_deterministically() -> None:
+    run = EvalRunner(TwoTraceApp()).run(
+        [EvalCase(case_id="two-traces", turns=(EvalTurn.user("x"),))]
+    )
+    turn = run.trials[0].turns[0]
+    assert len(turn.trace_ids) == 2
+    assert len(set(turn.trace_ids)) == 2
+    assert metric(turn.metrics, "span.count").value == 2
+    assert run.trials[0].trace_ids == turn.trace_ids
+
+
+class ScriptedSource:
+    """Deterministic process readings without touching psutil."""
+
+    def __init__(self) -> None:
+        self.readings = [
+            ProcessReading(cpu_seconds=10.0, rss_bytes=100),
+            ProcessReading(cpu_seconds=12.0, rss_bytes=200),
+        ]
+
+    def read(self) -> ProcessReading:
+        return self.readings.pop(0)
+
+
+class SampledApp:
+    """Attach an optional process sampler with a deterministic fake source."""
+
+    def invoke(self, invocation: Any) -> EvalOutput:
+        ticks = iter([1_000, 2_000, 3_000, 4_000, 5_000, 6_000, 7_000, 8_000])
+        sampler = ProcessSampler(
+            invocation.session.recorder,
+            source=ScriptedSource(),
+            monotonic_ns=lambda: next(ticks),
+        ).start(background=False)
+        assert sampler.sample_once()
+        assert sampler.sample_once()
+        assert sampler.close()
+        return EvalOutput(text="ok")
+
+
+def test_process_sampler_metrics_are_process_scoped_and_optional() -> None:
+    run = EvalRunner(SampledApp()).run([EvalCase(case_id="sampled", turns=(EvalTurn.user("x"),))])
+    turn = run.trials[0].turns[0]
+    samples = metric(turn.metrics, "process.samples")
+    assert samples.value == 2
+    assert samples.scope.value == "process"
+    assert samples.source == "process sampler"
+    rss = metric(turn.metrics, "process.rss_bytes")
+    assert rss.value == 200
+    assert rss.scope.value == "process"
+    assert "not per-agent" in (rss.detail or "")
+    cpu = metric(turn.metrics, "process.cpu_seconds")
+    assert cpu.value == 2.0
+    assert cpu.scope.value == "process"
+
+
+def test_recording_loss_is_visible_in_metrics(local_agent) -> None:
+    run = EvalRunner(
+        LangGraphEvalAdapter(local_agent),
+        limits=RecordingLimits(max_spans=1),
+    ).run([EvalCase(case_id="lossy", turns=(EvalTurn.user("Add 2 and 3"),))])
+    turn = run.trials[0].turns[0]
+    loss = metric(turn.metrics, "recording.loss_count")
+    assert loss.value is not None and loss.value > 0
+    assert "loss reported by" in (loss.detail or "")
+
+
+def test_custom_evaluator_can_read_traces_and_metrics() -> None:
+    def inspect_evidence(context: Any) -> bool:
+        kinds = {span.kind for bundle in context.traces for span in bundle.spans}
+        count = context.metrics.get("span.count")
+        return (
+            SpanKind.GRAPH in kinds
+            and count is not None
+            and count.value == 1
+            and context.output is not None
+            and context.output.text == "ok"
+        )
+
+    run = EvalRunner(SpanApp()).run(
+        [
+            EvalCase(
+                case_id="inspect",
+                turns=(
+                    EvalTurn.user("x", checks=(FunctionEvaluator("inspect", inspect_evidence),)),
+                ),
+            )
+        ]
+    )
+    assert run.passed
+    assert run.trials[0].turns[0].assessments[0].status is EvalStatus.PASS
