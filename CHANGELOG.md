@@ -10,6 +10,12 @@
 - Optional process-wide CPU/RSS counters and SDK-backed export-only OTel bridge.
   The profiler compatibility spike ended in an evidenced no-go for automatic
   py-spy/Speedscope timeline correlation; see ADR-001.
+- Local evaluation foundation: immutable cases/trials, a sync/async execution
+  adapter for LangGraph, per-trial recording isolation, trace-derived token,
+  latency, tool and optional process metrics with explicit provenance, composable
+  deterministic checks and time/resource budgets. JSON, JSONL and CSV datasets
+  load without a provider. Quality comparison, persisted inspection and
+  agent-facing workflows remain in the indexed evaluation slices.
 
 ### Upgrade from the prototype
 

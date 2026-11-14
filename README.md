@@ -122,6 +122,48 @@ and repeated runs sharing the callback. Per-token event capture stays disabled b
 default. Use one session per bounded recording window. Concurrent invocations
 sharing a handler retain separate trace IDs and parentage.
 
+## Evaluations
+
+The evaluation layer runs local cases under `RecordingSession` and derives metrics
+from the same neutral traces. It is not a second tracing implementation and does
+not require a provider, server or database.
+
+```python
+from langgraph_instrumentation import (
+    EvalCase,
+    EvalRunner,
+    EvalTurn,
+    ExactText,
+    LangGraphEvalAdapter,
+)
+
+case = EvalCase(
+    case_id="add",
+    turns=(EvalTurn.user("Add 2 and 3", checks=(ExactText("Result: 5"),)),),
+)
+run = EvalRunner(LangGraphEvalAdapter(app)).run([case])
+assert run.passed
+```
+
+`EvalRunner` creates a fresh recording session and store per case trial, so cases
+cannot observe each other's traces or conversation state. `LangGraphEvalAdapter`
+attaches the callback through the runtime config and can either accumulate message
+history or use a per-run checkpoint `thread_id`. Turn checks run after each turn;
+case checks run after the conversation. JSON, JSONL and CSV datasets load through
+`load_cases`/`save_cases`.
+
+Every metric records its source, unit, scope and completeness. `tokens.*` comes
+from provider-reported usage: unavailable usage is `missing`, never a silent zero.
+Process CPU/RSS measurements remain process-wide and are not per-agent attribution.
+Run the offline example with:
+
+```bash
+uv run --no-sync python examples/local_eval.py
+```
+
+Quality comparisons, persisted inspection and agent-facing workflows are delivered
+by the later evaluation slices.
+
 ## View locally
 
 Open Perfetto and use **Open trace file**. For sensitive data or air-gapped work,

@@ -28,8 +28,14 @@ LangGraph / Deep Agents callbacks
   exporters.
 - The recorder coordinates stores and processors but contains no Perfetto, SQLite,
   OTLP or demo-specific behavior.
+- Evaluation models and evaluators consume neutral records and a recording session;
+  they import no store implementation or exporter. Execution adapters may attach
+  framework callbacks but do not own tracing.
 - Optional dependencies are imported only by their explicit modules, never by the
   core package at import time.
+
+Evaluation runs reuse the same recorder and neutral records. They emit portable
+case/trial/run artifacts and trace references, not a second timeline.
 
 ## Boundaries
 
@@ -46,5 +52,6 @@ LangGraph / Deep Agents callbacks
 
 Directory-level contracts are in
 `src/langgraph_instrumentation/adapters/AGENT.md`,
-`src/langgraph_instrumentation/stores/AGENT.md` and
-`src/langgraph_instrumentation/exporters/AGENT.md`.
+`src/langgraph_instrumentation/stores/AGENT.md`,
+`src/langgraph_instrumentation/exporters/AGENT.md` and
+`src/langgraph_instrumentation/evals/AGENT.md`.

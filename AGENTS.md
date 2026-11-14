@@ -1,5 +1,12 @@
 # Agent Guide
 
+## Integration Branch
+
+The evaluation epic is integrated on `evals-epic`, not directly on `main`. Push
+completed slices to `evals-epic` and verify that branch in CI. When the epic is
+accepted and its sub-issues are closed, delete `evals-epic` locally and on the
+remote; do not leave it as a long-lived parallel branch.
+
 ## Purpose
 
 Guidance for changes to this repository. Architecture boundaries are recorded in
@@ -66,6 +73,7 @@ Maintain scoped `AGENT.md` files with the directory they govern:
 - `src/langgraph_instrumentation/adapters/AGENT.md`
 - `src/langgraph_instrumentation/stores/AGENT.md`
 - `src/langgraph_instrumentation/exporters/AGENT.md`
+- `src/langgraph_instrumentation/evals/AGENT.md`
 
 The nearest guide supplements this file and documents local protocols, forbidden
 dependencies, and the contract or fixture suite implementations must pass. Review
