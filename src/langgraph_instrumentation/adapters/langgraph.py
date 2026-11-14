@@ -14,7 +14,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import LLMResult
 
-from ..models import Attributes, SpanKind, SpanStatus
+from ..models import Attributes, SpanKind, SpanLink, SpanStatus
 from ..policies import (
     CapturePolicy,
     MetadataProjector,
@@ -36,6 +36,8 @@ _LANGGRAPH_METADATA_KEYS = frozenset(
         "langgraph_step",
         "langgraph_triggers",
         "thread_id",
+        "langgraph_retry_attempt",
+        "checkpoint_ns",
     }
 )
 
@@ -69,6 +71,7 @@ class _Recorder(Protocol):
         lane_id: str | None = None,
         lane_name: str | None = None,
         trace_name: str | None = None,
+        links: Sequence[SpanLink] = (),
     ) -> object | None: ...
 
     def add_event(
@@ -165,7 +168,10 @@ class LangGraphCallbackHandler(BaseCallbackHandler):
         parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
-        self._end(run_id, attributes={"output": self._project_payload(outputs)})
+        attributes = {"output": self._project_payload(outputs)}
+        if isinstance(outputs, Mapping) and outputs.get("__interrupt__"):
+            attributes["execution.interrupted"] = True
+        self._end(run_id, attributes=attributes)
 
     @_safe_callback
     def on_chain_error(
@@ -342,6 +348,12 @@ class LangGraphCallbackHandler(BaseCallbackHandler):
         parent_id = self._optional_correlation_id(parent_run_id)
         lane_id = None
         lane_name = None
+        links = ()
+        if metadata and parent_id is None:
+            raw_links = metadata.get("local_trace.links", [])
+            if not isinstance(raw_links, (list, tuple)) or len(raw_links) > 32:
+                raise ValueError("local_trace.links must be a list of at most 32 links")
+            links = tuple(SpanLink.from_dict(link) for link in raw_links)
         if kind is SpanKind.NODE and metadata is not None:
             node = metadata.get("langgraph_node")
             if node is not None:
@@ -359,6 +371,7 @@ class LangGraphCallbackHandler(BaseCallbackHandler):
                 lane_id=lane_id,
                 lane_name=lane_name,
                 trace_name=name,
+                links=links,
             )
         else:
             self._invoke(
@@ -389,6 +402,16 @@ class LangGraphCallbackHandler(BaseCallbackHandler):
                 else SpanStatus.ERROR
             )
             error_type = self._exception_type(error)
+            if error_type == "langgraph.errors.GraphInterrupt":
+                self._invoke(
+                    "end interrupted span",
+                    self._recorder.end_span,
+                    self._correlation_id(run_id),
+                    status=SpanStatus.SUCCESS,
+                    attributes={"execution.interrupted": True},
+                    preserve_application_error=True,
+                )
+                return
             error_attributes: dict[str, object] = {"type": error_type}
             message = self._exception_message(error) if self._capture_exception_messages else None
             if message is not None:

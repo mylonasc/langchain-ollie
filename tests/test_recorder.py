@@ -179,9 +179,8 @@ def test_duplicate_unknown_and_closed_operations_are_nonfatal_or_strict() -> Non
     assert recorder.start_span("span", "duplicate", SpanKind.CUSTOM) is None
     assert recorder.add_event("missing", "event") is None
     assert recorder.end_span("missing") is None
-    assert (
-        recorder.start_span("orphan", "orphan", SpanKind.CUSTOM, parent_correlation_id="x") is None
-    )
+    orphan = recorder.start_span("orphan", "orphan", SpanKind.CUSTOM, parent_correlation_id="x")
+    assert orphan is not None and orphan.attributes["recording.orphan_parent"] == "x"
     recorder.close()
     assert recorder.start_span("late", "late", SpanKind.CUSTOM) is None
 
@@ -643,10 +642,8 @@ def test_completed_context_cache_evicts_oldest_context_deterministically() -> No
         completed.append(recorder.end_span(correlation_id))
 
     assert list(recorder._completed_contexts) == ["second", "third"]
-    assert (
-        recorder.start_span("orphan", "orphan", SpanKind.NODE, parent_correlation_id="first")
-        is None
-    )
+    orphan = recorder.start_span("orphan", "orphan", SpanKind.NODE, parent_correlation_id="first")
+    assert orphan is not None and orphan.attributes["recording.orphan_parent"] == "first"
     child = recorder.start_span("child", "child", SpanKind.NODE, parent_correlation_id="second")
     assert child is not None and completed[1] is not None
     assert child.parent_span_id == completed[1].span_id

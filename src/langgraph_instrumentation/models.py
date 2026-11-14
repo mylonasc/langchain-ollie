@@ -168,6 +168,41 @@ class SpanEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class SpanLink:
+    """Explicit evidenced relationship to a span, independent of containment."""
+
+    trace_id: TraceId
+    span_id: SpanId
+    relationship: str = "follows_from"
+    attributes: Attributes = field(default_factory=lambda: _EMPTY_ATTRIBUTES)
+
+    def __post_init__(self) -> None:
+        _validate_instance(self.trace_id, TraceId, "trace_id")
+        _validate_instance(self.span_id, SpanId, "span_id")
+        _validate_nonempty_string(self.relationship, "relationship")
+        if len(self.relationship) > 64:
+            raise ValueError("relationship exceeds 64 characters")
+        object.__setattr__(self, "attributes", freeze_attributes(self.attributes))
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "trace_id": str(self.trace_id),
+            "span_id": str(self.span_id),
+            "relationship": self.relationship,
+            "attributes": attributes_to_dict(self.attributes),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object]) -> SpanLink:
+        return cls(
+            TraceId.from_hex(_required_string(data, "trace_id")),
+            SpanId.from_hex(_required_string(data, "span_id")),
+            _required_string(data, "relationship"),
+            _attributes_from_data(data, "attributes"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class Span:
     """An operation within a trace, either active or completed."""
 
@@ -185,6 +220,7 @@ class Span:
     attributes: Attributes = field(default_factory=lambda: _EMPTY_ATTRIBUTES)
     events: tuple[SpanEvent, ...] = ()
     execution_lane: ExecutionLane | None = None
+    links: tuple[SpanLink, ...] = ()
 
     def __post_init__(self) -> None:
         _validate_instance(self.trace_id, TraceId, "trace_id")
@@ -232,6 +268,9 @@ class Span:
         frozen_events = tuple(sorted(events, key=_event_sort_key))
         object.__setattr__(self, "attributes", freeze_attributes(self.attributes))
         object.__setattr__(self, "events", frozen_events)
+        for link in self.links:
+            _validate_instance(link, SpanLink, "link")
+        object.__setattr__(self, "links", tuple(self.links))
 
     @property
     def is_finished(self) -> bool:
@@ -259,6 +298,7 @@ class Span:
             "attributes": attributes_to_dict(self.attributes),
             "events": [event.to_dict() for event in self.events],
             "execution_lane": self.execution_lane.to_dict() if self.execution_lane else None,
+            "links": [link.to_dict() for link in self.links],
         }
 
     @classmethod
@@ -281,6 +321,10 @@ class Span:
             status=_enum_from_data(SpanStatus, data, "status"),
             status_description=_optional_string(data, "status_description"),
             attributes=_attributes_from_data(data, "attributes"),
+            links=tuple(
+                SpanLink.from_dict(_expect_mapping(item, "link"))
+                for item in _required_list(data, "links", default=[])
+            ),
             events=tuple(
                 SpanEvent.from_dict(_expect_mapping(item, "event")) for item in events_data
             ),

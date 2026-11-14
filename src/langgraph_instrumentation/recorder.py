@@ -23,6 +23,7 @@ from .models import (
     Span,
     SpanEvent,
     SpanKind,
+    SpanLink,
     SpanStatus,
     Trace,
     freeze_attributes,
@@ -265,10 +266,12 @@ class TraceRecorder:
         lane_id: str | None = None,
         lane_name: str | None = None,
         trace_name: str | None = None,
+        links: Iterable[SpanLink] = (),
     ) -> Span | None:
         """Start a root or child span and return its immutable active snapshot."""
         _validate_correlation_id(correlation_id)
         self.expire_spans()
+        selected_links = tuple(islice(links, 33))
         if parent_correlation_id is not None:
             _validate_correlation_id(parent_correlation_id, "parent_correlation_id")
             if trace_name is not None:
@@ -287,13 +290,16 @@ class TraceRecorder:
                         if active_parent is not None
                         else self._completed_contexts.get(parent_correlation_id)
                     )
-                    if parent is None:
+                    if parent is None and self._strict:
                         lifecycle_error = (
                             f"unknown parent correlation ID: {parent_correlation_id!r}"
                         )
             if lifecycle_error is not None:
                 return self._lifecycle_failure(lifecycle_error)
             with self._condition:
+                orphan = parent_correlation_id is not None and parent is None
+                if orphan:
+                    self._dropped["lifecycle"] += 1
                 if not self._admit("spans"):
                     return None
                 if len(self._active) >= self._limits.max_active_spans:
@@ -329,7 +335,26 @@ class TraceRecorder:
                         trace_id, self._bounded_attributes(attributes)
                     ),
                     execution_lane=lane,
+                    links=tuple(
+                        replace(
+                            link,
+                            attributes=self._charge_attributes(
+                                trace_id, self._bounded_attributes(link.attributes)
+                            ),
+                        )
+                        for link in selected_links[:32]
+                    ),
                 )
+                if len(selected_links) > 32:
+                    self._dropped["attributes"] += 1
+                if orphan:
+                    span = replace(
+                        span,
+                        attributes={
+                            **span.attributes,
+                            "recording.orphan_parent": parent_correlation_id,
+                        },
+                    )
             succeeded = self._store_start_span(trace, span) if self._store else True
             if not succeeded:
                 if self._trace_counts[trace_id]["spans"] == 0:
@@ -499,6 +524,19 @@ class TraceRecorder:
                 )
             with self._condition:
                 completed = self._complete(active, status, status_description, attributes)
+                if completed.attributes.get("execution.interrupted"):
+                    for ancestor in self._active.values():
+                        if (
+                            ancestor.span.trace_id == completed.trace_id
+                            and ancestor.span.parent_span_id is None
+                        ):
+                            ancestor.span = replace(
+                                ancestor.span,
+                                attributes={
+                                    **ancestor.span.attributes,
+                                    "execution.interrupted": True,
+                                },
+                            )
             succeeded = (
                 self._store_call("complete span", self._store.complete_span, completed)
                 if self._store

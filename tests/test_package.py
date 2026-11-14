@@ -29,6 +29,7 @@ def test_public_api_is_explicit() -> None:
         "SpanEvent",
         "SpanId",
         "SpanKind",
+        "SpanLink",
         "SpanProcessor",
         "SpanStatus",
         "SystemClock",

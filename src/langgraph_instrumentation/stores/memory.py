@@ -251,7 +251,8 @@ def _same_started_span(active: Span, completed: Span) -> bool:
 def _trace_status(state: _TraceState) -> SpanStatus:
     if state.trace.end_time_unix_ns is None:
         return SpanStatus.UNSET
-    statuses = {span.status for span in state.spans.values()}
+    roots = [span for span in state.spans.values() if span.parent_span_id is None]
+    statuses = {span.status for span in roots}
     for status in (SpanStatus.ERROR, SpanStatus.CANCELLED, SpanStatus.ABANDONED):
         if status in statuses:
             return status

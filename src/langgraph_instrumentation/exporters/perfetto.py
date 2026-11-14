@@ -72,6 +72,7 @@ class PerfettoExporter:
                     "span_id": str(span.span_id),
                     "parent_span_id": str(span.parent_span_id) if span.parent_span_id else None,
                     "status": span.status.value,
+                    "links": [link.to_dict() for link in span.links],
                 }
             )
             ts = (span.start_time_monotonic_ns - origin) / 1_000
@@ -105,6 +106,31 @@ class PerfettoExporter:
                     )
                 )
             self._containment(events, span, by_id, assigned, origin, flow_id)
+        link_id = len(spans)
+        for span in spans:
+            for link in span.links:
+                source_key = (str(link.trace_id), str(link.span_id))
+                source = by_id.get(source_key)
+                if source is None or source.start_time_monotonic_ns > span.start_time_monotonic_ns:
+                    continue  # external/future endpoints remain metadata, never fabricated arrows
+                link_id += 1
+                target_key = (str(span.trace_id), str(span.span_id))
+                for phase, key, timestamp in (
+                    ("s", source_key, source.start_time_monotonic_ns),
+                    ("f", target_key, span.start_time_monotonic_ns),
+                ):
+                    events.append(
+                        self._event(
+                            f"link:{link.relationship}",
+                            phase,
+                            assigned[key],
+                            ts=(timestamp - origin) / 1000,
+                            cat="causal_link",
+                            id=link_id,
+                            bp="e",
+                            args={"relationship": link.relationship},
+                        )
+                    )
         for bundle in ordered:
             for metric in bundle.metrics:
                 tid = assigned.get((str(metric.trace_id), str(metric.span_id)), 0)
@@ -130,7 +156,7 @@ class PerfettoExporter:
                 "loss": loss,
                 "incomplete": any(loss.values())
                 or any(not s.is_finished or s.status is SpanStatus.ABANDONED for s in spans),
-                "flows": "containment only; not graph/data dependencies",
+                "flows": "contains=containment; link:*=explicit evidenced links only",
             },
         }
 

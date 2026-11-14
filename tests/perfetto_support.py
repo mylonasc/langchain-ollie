@@ -42,7 +42,17 @@ def assert_imported_spans(binary: str, artifact: Path, bundles: Sequence[TraceBu
             str(span.parent_span_id) if span.parent_span_id else "[NULL]"
         )
     flows = query(binary, artifact, "SELECT count(*) AS count FROM flow")
-    assert int(flows[0]["count"]) == sum(span.parent_span_id is not None for span in spans)
+    contexts = {(s.trace_id, s.span_id): s for s in spans}
+    explicit = sum(
+        (link.trace_id, link.span_id) in contexts
+        and contexts[(link.trace_id, link.span_id)].start_time_monotonic_ns
+        <= s.start_time_monotonic_ns
+        for s in spans
+        for link in s.links
+    )
+    assert (
+        int(flows[0]["count"]) == sum(span.parent_span_id is not None for span in spans) + explicit
+    )
     errors = query(
         binary, artifact, "SELECT name, value FROM stats WHERE severity = 'error' AND value > 0"
     )

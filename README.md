@@ -69,6 +69,44 @@ or a proven critical path. Token usage appears as counters. The JSON's `otherDat
 contains schema version, process/clock identity, resource metadata, loss counters,
 and an `incomplete` flag. Unfinished spans become abandoned on orderly shutdown.
 
+### Graph identity, retries and checkpoints
+
+Callback UUIDs identify individual executions; node names alone do not identify a
+task. Step/path/namespace/checkpoint metadata is retained where supplied by the
+supported runtime. Nested and dynamic fan-out executions keep separate canonical
+span IDs and overlap-safe visual tracks. Root status describes the invocation's
+outcome: a handled failed retry does not turn a successful root into an error.
+Failed attempt spans remain visible. Runtime interrupts are control flow, not
+application errors; `execution.interrupted` marks the interrupted invocation.
+
+A resumed invocation is a new trace, not a span that pretends to survive restart.
+Use a checkpoint plus an **explicit evidenced link** to the prior root:
+
+```python
+from langgraph_instrumentation import SpanLink
+
+link = SpanLink(previous_root.trace_id, previous_root.span_id, "resumes")
+config = {
+    "callbacks": [recording.handler],
+    "configurable": checkpoint_config,
+    "metadata": {"local_trace.links": [link.to_dict()]},
+}
+```
+
+The same API supports other explicitly known `follows_from`/dependency links.
+`TraceRecorder.start_span(links=...)` accepts neutral `SpanLink` records (at most
+32 retained). Links round-trip independently from parents. `link:*` arrows render
+only when both endpoints exist in the same exported clock domain and are ordered
+in time; external endpoints remain metadata. Graph dependencies are **not inferred
+from names, containment, or join timing**. Thread/session IDs group invocations but
+alone do not prove a resume relationship. Cross-process clock correlation is not
+supported by the local exporter.
+
+Unknown/evicted parents in default mode create a separate explicitly partial root
+with `recording.orphan_parent` and a loss counter, never attach to an unrelated
+trace. Strict mode rejects unknown parents. Late children use the bounded completed
+context cache only while their parent's context remains known.
+
 ## Safety and recording limits
 
 Metadata-only capture is the default: bodies are replaced with original types/

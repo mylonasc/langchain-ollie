@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-- Status: in progress on `epic-refactor`; REF-01 through REF-04 complete, REF-05 next.
+- Status: in progress on `epic-refactor`; REF-01 through REF-05 complete, REF-06 next.
 - Parent issue: [#13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 - Primary outcome: safe, bounded, offline LangGraph and Deep Agents execution
   traces that can be inspected in Perfetto without a service or credentials.
@@ -174,6 +174,18 @@ stable and may become child issues later; this parent initially tracks the slice
   Verification: 192 default tests and six Perfetto tests pass; lint/format/types
   and wheel/sdist build pass. Prior slices are pushed; hosted CI for REF-03 passed
   at https://github.com/mylonasc/langgraph_instrumentation/actions/runs/43575876930.
+
+- REF-05: [#18](https://github.com/mylonasc/langgraph_instrumentation/issues/18).
+  Added bounded immutable explicit span links and Perfetto causal arrows distinct
+  from containment; checkpoint resume is a new linked invocation. Unknown parents
+  become explicit partial roots in default mode. Root outcome now wins over
+  handled retry failures, and runtime interrupts are marked as neutral control
+  flow. Real tests cover Send fan-out with barriers, nested repeated nodes/loops,
+  retries/terminal failures, checkpoint resume, shared-handler concurrency and
+  concurrent Deep Agents workers. Imported SQL verifies links and overlap-free
+  tracks. Verification: 201 default tests, seven importer tests, lint/format/types
+  and build pass. Runtime metadata is preserved; unsupported automatic DAG-edge
+  inference is deliberately not fabricated.
 
 ### Useful-state checkpoints
 
@@ -507,7 +519,7 @@ Test infrastructure rules:
 - [x] REF-02 — Modern LangGraph-to-Perfetto MVP; legacy removal (M1, #15)
 - [x] REF-03 — Real Deep Agents e2e and demo (#16)
 - [x] REF-04 — Bounded efficient recording (M2 with REF-03, #17)
-- [ ] REF-05 — Graph/concurrency/retry/resume semantics
+- [x] REF-05 — Graph/concurrency/retry/resume semantics (#18)
 - [ ] REF-06 — Failure isolation and lifecycle (M3 with REF-05)
 - [ ] REF-07 — SQLite durability and reopen
 - [ ] REF-08 — Local-first release (M4; core epic complete)
