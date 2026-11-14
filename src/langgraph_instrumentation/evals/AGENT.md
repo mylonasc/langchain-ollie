@@ -33,9 +33,20 @@ models.
   Canonical JSON (sorted keys) round-trips byte-stable; JSONL holds one artifact
   per line with kind dispatch.
 - The CLI is a thin wrapper over the public Python API: agent entrypoints are
-  `MODULE:ATTR` app-or-factory references, output is stable JSON by default,
-  and exit codes are 0 success/pass, 1 gate failed, 2 usage/artifact error.
-  Reports are static, self-contained HTML with no external references.
+  `MODULE:ATTR` app-or-factory references, trace bundles resolve from a
+  caller-supplied read-only database (`inspect --traces`), output is stable JSON
+  by default, and exit codes are 0 success/pass, 1 gate failed, 2 usage/artifact
+  error. Reports are static, self-contained HTML with no external references.
+- Agent-facing inspection consumes run artifacts and caller-supplied bundles
+  only: no store imports, no direct database queries. Summaries are versioned,
+  bounded and flag truncation; missing trace bundles are reported, never
+  synthesized.
+- Proposals are immutable candidate records. Validation is structural and never
+  executes an agent. Review requires explicit reviewer and decision arguments;
+  the input is never mutated. Only accepted proposals apply, and golden
+  collisions fail without explicit `--replace`. Feedback content is
+  caller-supplied and bounded; instrumentation payloads are never captured
+  implicitly.
 - The default suite is offline. Fake models, not agent runtimes; optional judges and
   provider calls require deliberate configuration.
 
@@ -48,7 +59,11 @@ reachability, dataset round-trips and async execution.
 tolerances, missing-metric policies, identity mismatches, added/removed cases and
 optional judges.
 `tests/test_eval_artifacts.py` covers canonical persistence, byte-stability,
-kind/version dispatch and JSONL.
-`tests/test_eval_cli.py` covers the thin CLI surface, gate exit codes and the
-offline HTML report. Add contract tests at the model, adapter, metric or evaluator
-boundary changed.
+kind/version dispatch, JSONL, proposal/feedback artifacts and no-payload-embedding.
+`tests/test_eval_cli.py` covers the thin CLI surface, gate exit codes, the
+offline HTML report, proposal lifecycle commands and read-only trace resolution.
+`tests/test_eval_inspect.py` covers bounded failure/turn/regression summaries,
+missing-trace reporting and truncation flags.
+`tests/test_eval_proposals.py` covers feedback validation, proposal validation,
+explicit review, golden-dataset application and artifact persistence. Add contract
+tests at the model, adapter, metric or evaluator boundary changed.

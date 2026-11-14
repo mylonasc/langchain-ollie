@@ -65,6 +65,14 @@ Notes:
 - `report` writes one self-contained HTML file: inline CSS, no external
   references, no scripts. It lists failures first, then cases, metrics with
   provenance, trace references and the comparison outcome.
+- `inspect` summarizes failures and turn evidence without touching trace
+  stores; `--traces DB` additionally resolves tool/LLM calls from a
+  caller-supplied read-only trace database.
+- `propose` builds a candidate proposal from a candidate-cases dataset plus
+  rationale, author and evidence references. `proposal-validate` re-checks it,
+  `proposal-review` records an explicit accept/reject decision, and
+  `apply-proposal` merges an accepted proposal into a golden dataset
+  (`--replace` to revise colliding cases).
 
 ## Output and exit codes
 

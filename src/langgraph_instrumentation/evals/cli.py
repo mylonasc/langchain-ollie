@@ -17,19 +17,23 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from ..models import TraceBundle
 from ..policies import CapturePolicy
 from .aggregation import MetricAggregation, TrialAggregation, aggregate_run
 from .artifacts import (
     load_any,
     load_artifacts,
     load_comparison,
+    load_proposal,
     load_run,
     save_comparison,
+    save_proposal,
     save_run,
 )
 from .comparison import MetricDirection, MetricRule, compare_runs
-from .datasets import load_cases
+from .datasets import load_cases, save_cases
 from .models import EvalCase, EvalRun
+from .proposals import EvalProposal, EvidenceKind
 from .report import render_report
 from .runner import EvalRunner
 
@@ -114,6 +118,65 @@ def _parser() -> argparse.ArgumentParser:
     report_cmd.add_argument("--title", default="Evaluation report")
     report_cmd.add_argument("--format", choices=_FORMATS, default="json")
     report_cmd.set_defaults(function=_report)
+
+    inspect_cmd = commands.add_parser(
+        "inspect", help="bounded read-only failure and turn inspection"
+    )
+    inspect_cmd.add_argument("run", type=Path)
+    inspect_cmd.add_argument("--case", default=None)
+    inspect_cmd.add_argument("--turn", default=None, type=int)
+    inspect_cmd.add_argument("--max-cases", default=20, type=int)
+    inspect_cmd.add_argument("--max-text", default=2000, type=int)
+    inspect_cmd.add_argument("--max-calls", default=50, type=int)
+    inspect_cmd.add_argument(
+        "--traces",
+        default=None,
+        type=Path,
+        help="read-only trace database used only to resolve tool/LLM calls",
+    )
+    inspect_cmd.add_argument("--format", choices=_FORMATS, default="json")
+    inspect_cmd.set_defaults(function=_inspect)
+
+    propose_cmd = commands.add_parser("propose", help="create a candidate evaluation proposal")
+    propose_cmd.add_argument("--base-dataset", required=True, type=Path)
+    propose_cmd.add_argument("--candidate-cases", required=True, type=Path)
+    propose_cmd.add_argument("--rationale", required=True)
+    propose_cmd.add_argument("--author", default="unknown")
+    propose_cmd.add_argument("--evidence-run", default=None, type=Path)
+    propose_cmd.add_argument("--evidence-trace", action="append", default=[])
+    propose_cmd.add_argument("--proposal-id", default=None)
+    propose_cmd.add_argument("--out", required=True, type=Path)
+    propose_cmd.add_argument("--format", choices=_FORMATS, default="json")
+    propose_cmd.set_defaults(function=_propose)
+
+    validate_proposal_cmd = commands.add_parser(
+        "proposal-validate", help="validate a candidate proposal"
+    )
+    validate_proposal_cmd.add_argument("proposal", type=Path)
+    validate_proposal_cmd.add_argument("--base-dataset", default=None, type=Path)
+    validate_proposal_cmd.add_argument("--format", choices=_FORMATS, default="json")
+    validate_proposal_cmd.set_defaults(function=_proposal_validate)
+
+    review_cmd = commands.add_parser(
+        "proposal-review", help="explicitly accept or reject a proposal"
+    )
+    review_cmd.add_argument("proposal", type=Path)
+    review_cmd.add_argument("--decision", required=True, choices=("accept", "reject"))
+    review_cmd.add_argument("--reviewer", required=True)
+    review_cmd.add_argument("--note", default=None)
+    review_cmd.add_argument("--out", required=True, type=Path)
+    review_cmd.add_argument("--format", choices=_FORMATS, default="json")
+    review_cmd.set_defaults(function=_proposal_review)
+
+    apply_cmd = commands.add_parser(
+        "apply-proposal", help="merge an accepted proposal into golden cases"
+    )
+    apply_cmd.add_argument("dataset", type=Path)
+    apply_cmd.add_argument("proposal", type=Path)
+    apply_cmd.add_argument("--out", required=True, type=Path)
+    apply_cmd.add_argument("--replace", action="store_true")
+    apply_cmd.add_argument("--format", choices=_FORMATS, default="json")
+    apply_cmd.set_defaults(function=_apply_proposal)
 
     return parser
 
@@ -335,6 +398,165 @@ def _report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _inspect(args: argparse.Namespace) -> int:
+    from .inspect import summarize_failures, turn_evidence
+
+    run = _require_run(args.run)
+    if args.turn is not None and args.case is None:
+        raise ArtifactError("--turn requires --case")
+    if args.traces is not None and args.case is None:
+        raise ArtifactError("--traces requires --case")
+    if args.case is not None:
+        evidence = turn_evidence(
+            run,
+            args.case,
+            args.turn if args.turn is not None else 0,
+            traces=_load_trace_bundles(args, run, args.case, args.turn or 0),
+            max_text=args.max_text,
+            max_calls=args.max_calls,
+        )
+        _emit(evidence.to_dict(), args.format)
+        return 0
+    try:
+        summary = summarize_failures(run, max_cases=args.max_cases)
+    except (TypeError, ValueError) as exc:
+        raise ArtifactError(str(exc)) from exc
+    _emit(summary.to_dict(), args.format)
+    return 0
+
+
+def _load_trace_bundles(
+    args: argparse.Namespace, run: EvalRun, case_id: str, turn_index: int
+) -> dict[str, TraceBundle] | None:
+    if args.traces is None:
+        return None
+    from ..identifiers import TraceId
+    from ..stores import SQLiteTraceStore
+    from .inspect import turn_evidence
+
+    if not args.traces.is_file():
+        raise ArtifactError(f"trace database does not exist: {args.traces}")
+    preliminary = turn_evidence(run, case_id, turn_index)
+    bundles: dict[str, TraceBundle] = {}
+    store = SQLiteTraceStore(args.traces, read_only=True)
+    try:
+        for trace_id in preliminary.trace_ids:
+            try:
+                bundle = store.get_trace(TraceId.from_hex(trace_id))
+            except (TypeError, ValueError) as exc:
+                raise ArtifactError(f"invalid trace reference {trace_id!r}: {exc}") from exc
+            if bundle is not None:
+                bundles[trace_id] = bundle
+    finally:
+        store.close()
+    return bundles
+
+
+def _propose(args: argparse.Namespace) -> int:
+    from .proposals import EvidenceRef, propose
+
+    base = _require_cases(args.base_dataset)
+    candidates = _require_cases(args.candidate_cases)
+    evidence: list[EvidenceRef] = []
+    if args.evidence_run is not None:
+        baseline = _require_run(args.evidence_run)
+        evidence.append(
+            EvidenceRef(kind=EvidenceKind.RUN, ref=baseline.run_id, note=str(args.evidence_run))
+        )
+    for trace_id in args.evidence_trace:
+        if not str(trace_id).strip():
+            raise ArtifactError("evidence trace IDs must not be empty")
+        evidence.append(EvidenceRef(kind=EvidenceKind.TRACE, ref=str(trace_id)))
+    try:
+        proposal = propose(
+            candidates,
+            proposal_id=args.proposal_id,
+            author=args.author,
+            rationale=args.rationale,
+            evidence=evidence,
+            validate_against=base,
+        )
+    except (TypeError, ValueError) as exc:
+        raise ArtifactError(f"cannot create proposal: {exc}") from exc
+    save_proposal(proposal, args.out)
+    _emit(
+        {
+            "proposal": str(args.out),
+            "proposal_id": proposal.proposal_id,
+            "status": proposal.status.value,
+            "validation_passed": proposal.validation.passed if proposal.validation else None,
+            "findings": list(proposal.validation.findings) if proposal.validation else [],
+        },
+        args.format,
+    )
+    return 0 if (proposal.validation and proposal.validation.passed) else 1
+
+
+def _proposal_validate(args: argparse.Namespace) -> int:
+    from .proposals import validate_proposal
+
+    proposal = _require_proposal(args.proposal)
+    base = _require_cases(args.base_dataset) if args.base_dataset is not None else ()
+    validation = validate_proposal(proposal, base)
+    _emit(
+        {
+            "proposal": str(args.proposal),
+            "proposal_id": proposal.proposal_id,
+            "status": proposal.status.value,
+            "validation_passed": validation.passed,
+            "findings": list(validation.findings),
+        },
+        args.format,
+    )
+    return 0 if validation.passed else 1
+
+
+def _proposal_review(args: argparse.Namespace) -> int:
+    from .proposals import ProposalStatus, review_proposal
+
+    proposal = _require_proposal(args.proposal)
+    decision = ProposalStatus.ACCEPTED if args.decision == "accept" else ProposalStatus.REJECTED
+    try:
+        reviewed = review_proposal(
+            proposal, reviewer=args.reviewer, decision=decision, note=args.note
+        )
+    except (TypeError, ValueError) as exc:
+        raise ArtifactError(f"cannot review proposal: {exc}") from exc
+    save_proposal(reviewed, args.out)
+    _emit(
+        {
+            "proposal": str(args.out),
+            "proposal_id": reviewed.proposal_id,
+            "status": reviewed.status.value,
+            "reviewer": reviewed.review.reviewer if reviewed.review else None,
+        },
+        args.format,
+    )
+    return 0
+
+
+def _apply_proposal(args: argparse.Namespace) -> int:
+    from .proposals import apply_proposal
+
+    base = _require_cases(args.dataset)
+    proposal = _require_proposal(args.proposal)
+    try:
+        merged = apply_proposal(base, proposal, replace=args.replace)
+    except (TypeError, ValueError) as exc:
+        raise ArtifactError(f"cannot apply proposal: {exc}") from exc
+    save_cases(merged, args.out)
+    _emit(
+        {
+            "dataset": str(args.out),
+            "cases": len(merged),
+            "proposal_id": proposal.proposal_id,
+            "replaced": args.replace,
+        },
+        args.format,
+    )
+    return 0
+
+
 def _invalid(args: argparse.Namespace, path: Path, message: str) -> int:
     _emit({"file": str(path), "valid": False, "error": message}, args.format)
     return 1
@@ -352,6 +574,16 @@ def _require_run(path: Path) -> EvalRun:
         return load_run(path)
     except (TypeError, ValueError) as exc:
         raise ArtifactError(f"cannot load run {path}: {exc}") from exc
+
+
+def _require_proposal(path: Path) -> EvalProposal:
+    try:
+        proposal = load_proposal(path)
+    except (TypeError, ValueError) as exc:
+        raise ArtifactError(f"cannot load proposal {path}: {exc}") from exc
+    if not isinstance(proposal, EvalProposal):
+        raise ArtifactError(f"not an evaluation proposal: {path}")
+    return proposal
 
 
 def _parse_rule(spec: str) -> MetricRule:

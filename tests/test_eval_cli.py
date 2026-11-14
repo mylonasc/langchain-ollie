@@ -304,3 +304,155 @@ def test_report_writes_offline_html(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert "0123456789abcdef" not in document
     assert "http" not in document
     assert "<script" not in document
+
+
+def _candidate_cases(path: Path) -> Path:
+    from langgraph_instrumentation import EvalCase, EvalTurn, ExactText, save_cases
+
+    destination = path / "candidate.json"
+    save_cases(
+        [
+            EvalCase(
+                case_id="outage-window",
+                turns=(EvalTurn.user("What caused the outage?", checks=(ExactText("ok"),)),),
+            )
+        ],
+        destination,
+    )
+    return destination
+
+
+def test_inspect_reports_failures_and_turn_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: Any
+) -> None:
+    monkeypatch.syspath_prepend(str(EXAMPLES))
+    run_path = tmp_path / "run.json"
+    assert (
+        evals_main(
+            [
+                "run",
+                str(_dataset(tmp_path)),
+                "--agent",
+                "local_agent:build_agent",
+                "--out",
+                str(run_path),
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    assert evals_main(["inspect", str(run_path)]) == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["failed_trials"] == 0
+
+    assert evals_main(["inspect", str(run_path), "--case", "add", "--turn", "0"]) == 0
+    evidence = json.loads(capsys.readouterr().out)
+    assert evidence["case_id"] == "add"
+    assert evidence["missing_trace_ids"] != []
+    assert evidence["calls"] == []
+
+    assert evals_main(["inspect", str(run_path), "--turn", "0"]) == 2
+
+
+def test_proposal_lifecycle_through_cli(tmp_path: Path, capsys: Any) -> None:
+    dataset = _dataset(tmp_path)
+    candidate = _candidate_cases(tmp_path)
+    proposal = tmp_path / "proposal.json"
+
+    code = evals_main(
+        [
+            "propose",
+            "--base-dataset",
+            str(dataset),
+            "--candidate-cases",
+            str(candidate),
+            "--rationale",
+            "Cover the outage window seen in the failure summary.",
+            "--author",
+            "agent",
+            "--out",
+            str(proposal),
+        ]
+    )
+    assert code == 0
+    created = json.loads(capsys.readouterr().out)
+    assert created["status"] == "candidate"
+    assert created["validation_passed"] is True
+    capsys.readouterr()
+
+    assert evals_main(["proposal-validate", str(proposal), "--base-dataset", str(dataset)]) == 0
+    capsys.readouterr()
+
+    reviewed = tmp_path / "reviewed.json"
+    assert (
+        evals_main(
+            [
+                "proposal-review",
+                str(proposal),
+                "--decision",
+                "accept",
+                "--reviewer",
+                "sme",
+                "--note",
+                "Reproduces the outage.",
+                "--out",
+                str(reviewed),
+            ]
+        )
+        == 0
+    )
+
+    golden = tmp_path / "golden.json"
+    assert evals_main(["apply-proposal", str(dataset), str(reviewed), "--out", str(golden)]) == 0
+    capsys.readouterr()
+    assert evals_main(["cases", str(golden)]) == 0
+    listed = json.loads(capsys.readouterr().out)
+    assert [case["case_id"] for case in listed["cases"]] == ["add", "outage-window"]
+
+    assert evals_main(["apply-proposal", str(dataset), str(proposal), "--out", str(golden)]) == 2
+
+
+def test_inspect_resolves_calls_from_read_only_trace_db(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: Any, local_agent: Any
+) -> None:
+    from langgraph_instrumentation import (
+        EvalRunner,
+        LangGraphEvalAdapter,
+        SQLiteTraceStore,
+    )
+
+    monkeypatch.syspath_prepend(str(EXAMPLES))
+    traces_db = tmp_path / "traces.db"
+    run = EvalRunner(
+        LangGraphEvalAdapter(local_agent),
+        store_factory=lambda: SQLiteTraceStore(traces_db),
+    ).run(
+        [
+            EvalCase(
+                case_id="add",
+                turns=(EvalTurn.user("Add 2 and 3"),),
+            )
+        ]
+    )
+    run_path = tmp_path / "run.json"
+    save_run(run, run_path)
+    capsys.readouterr()
+
+    assert (
+        evals_main(
+            [
+                "inspect",
+                str(run_path),
+                "--case",
+                "add",
+                "--turn",
+                "0",
+                "--traces",
+                str(traces_db),
+            ]
+        )
+        == 0
+    )
+    evidence = json.loads(capsys.readouterr().out)
+    assert evidence["missing_trace_ids"] == []
+    assert {call["kind"] for call in evidence["calls"]} == {"llm", "tool"}

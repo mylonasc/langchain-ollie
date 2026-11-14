@@ -19,11 +19,14 @@
   comparison with explicit metric rules/tolerances/directions, structured state
   predicates and an optional provider-free judge protocol. Execution, assessment
   and missing-evidence outcomes stay distinct.
-- Portable evaluation artifacts and local inspection: canonical JSON run,
-  aggregate and comparison artifacts (plus mixed JSONL), a thin CLI over the
-  public Python API with machine-readable output and CI gate exit codes, and a
-  static offline HTML report. Agent-facing workflows remain in the indexed
-  evaluation slices.
+- Agent-facing inspection and proposal workflows: bounded read-only failure,
+  turn and regression summaries over run artifacts plus caller-supplied trace
+  bundles (missing evidence explicit, truncation flagged); feedback records
+  with provenance and a structural privacy boundary; candidate proposals with
+  rationale, evidence refs and fully specified cases; structural validation,
+  explicit accept/reject review and golden-dataset application that fails on
+  silent overwrites. A packaged offline walkthrough uses only public
+  interfaces. No MCP server, agent runtime or hosted service is introduced.
 
 ### Upgrade from the prototype
 

@@ -6,6 +6,7 @@ import csv
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
+from typing import cast
 
 from ..models import JSONValue, attributes_to_dict
 from .evaluators import (
@@ -50,7 +51,7 @@ def save_cases(cases: Sequence[EvalCase], path: str | Path) -> None:
         payload = {
             "schema_version": _SCHEMA_VERSION,
             "kind": _DATASET_KIND,
-            "cases": [_case_to_dict(case) for case in cases],
+            "cases": [case_to_dict(case) for case in cases],
         }
         destination.write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n",
@@ -64,7 +65,7 @@ def save_cases(cases: Sequence[EvalCase], path: str | Path) -> None:
                 sort_keys=True,
             )
         ]
-        lines.extend(json.dumps(_case_to_dict(case), sort_keys=True) for case in cases)
+        lines.extend(json.dumps(case_to_dict(case), sort_keys=True) for case in cases)
         destination.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return
     if suffix == ".csv":
@@ -98,7 +99,7 @@ def _load_json(payload: object) -> tuple[EvalCase, ...]:
     cases = payload.get("cases")
     if not isinstance(cases, list):
         raise TypeError("cases must be a list")
-    return _unique_cases(_case_from_dict(_mapping(item, "case")) for item in cases)
+    return _unique_cases(case_from_dict(_mapping(item, "case")) for item in cases)
 
 
 def _load_jsonl(text: str) -> tuple[EvalCase, ...]:
@@ -114,7 +115,7 @@ def _load_jsonl(text: str) -> tuple[EvalCase, ...]:
                 f"unsupported evaluation dataset version: {first.get('schema_version')!r}"
             )
         records = records[1:]
-    return _unique_cases(_case_from_dict(_mapping(item, "case")) for item in records)
+    return _unique_cases(case_from_dict(_mapping(item, "case")) for item in records)
 
 
 def _save_csv(cases: Sequence[EvalCase], destination: Path) -> None:
@@ -122,7 +123,7 @@ def _save_csv(cases: Sequence[EvalCase], destination: Path) -> None:
         writer = csv.DictWriter(stream, fieldnames=_CSV_FIELDS)
         writer.writeheader()
         for case in cases:
-            case_checks = json.dumps(_checks_to_specs(case.checks), sort_keys=True)
+            case_checks = json.dumps(checks_to_specs(case.checks), sort_keys=True)
             case_metadata = json.dumps(_json_mapping(case.metadata), sort_keys=True)
             for index, turn in enumerate(case.turns):
                 writer.writerow(
@@ -142,7 +143,7 @@ def _save_csv(cases: Sequence[EvalCase], destination: Path) -> None:
                             if turn.input is None
                             else json.dumps(_json_mapping(turn.input, "input"), sort_keys=True)
                         ),
-                        "checks_json": json.dumps(_checks_to_specs(turn.checks), sort_keys=True),
+                        "checks_json": json.dumps(checks_to_specs(turn.checks), sort_keys=True),
                         "metadata_json": json.dumps(_json_mapping(turn.metadata), sort_keys=True),
                         "tags": ",".join(sorted(turn.tags)),
                         "timeout_seconds": (
@@ -234,30 +235,36 @@ def _load_csv(source: Path) -> tuple[EvalCase, ...]:
     return tuple(cases)
 
 
-def _case_to_dict(case: EvalCase) -> dict[str, object]:
-    return {
-        "case_id": case.case_id,
-        "name": case.name,
-        "description": case.description,
-        "tags": sorted(case.tags),
-        "metadata": _json_mapping(case.metadata),
-        "turns": [_turn_to_dict(turn) for turn in case.turns],
-        "checks": _checks_to_specs(case.checks),
-    }
+def case_to_dict(case: EvalCase) -> dict[str, JSONValue]:
+    return cast(
+        dict[str, JSONValue],
+        {
+            "case_id": case.case_id,
+            "name": case.name,
+            "description": case.description,
+            "tags": sorted(case.tags),
+            "metadata": _json_mapping(case.metadata),
+            "turns": [turn_to_dict(turn) for turn in case.turns],
+            "checks": checks_to_specs(case.checks),
+        },
+    )
 
 
-def _turn_to_dict(turn: EvalTurn) -> dict[str, object]:
-    return {
-        "input": None if turn.input is None else _json_mapping(turn.input, "input"),
-        "messages": [[role, content] for role, content in turn.messages],
-        "checks": _checks_to_specs(turn.checks),
-        "metadata": _json_mapping(turn.metadata),
-        "tags": sorted(turn.tags),
-        "timeout_seconds": turn.timeout_seconds,
-    }
+def turn_to_dict(turn: EvalTurn) -> dict[str, JSONValue]:
+    return cast(
+        dict[str, JSONValue],
+        {
+            "input": None if turn.input is None else _json_mapping(turn.input, "input"),
+            "messages": [[role, content] for role, content in turn.messages],
+            "checks": checks_to_specs(turn.checks),
+            "metadata": _json_mapping(turn.metadata),
+            "tags": sorted(turn.tags),
+            "timeout_seconds": turn.timeout_seconds,
+        },
+    )
 
 
-def _case_from_dict(data: Mapping[str, object]) -> EvalCase:
+def case_from_dict(data: Mapping[str, object]) -> EvalCase:
     turns_data = data.get("turns")
     if not isinstance(turns_data, list) or not turns_data:
         raise ValueError("a case must define at least one turn")
@@ -265,14 +272,14 @@ def _case_from_dict(data: Mapping[str, object]) -> EvalCase:
         case_id=_required_string(data, "case_id"),
         name=_optional_string(data, "name"),
         description=_optional_string(data, "description"),
-        turns=tuple(_turn_from_dict(_mapping(item, "turn")) for item in turns_data),
+        turns=tuple(turn_from_dict(_mapping(item, "turn")) for item in turns_data),
         checks=_checks_from_specs(data.get("checks", [])),
         metadata=_json_mapping(data.get("metadata", {}), "metadata"),
         tags=frozenset(str(tag) for tag in _list(data.get("tags", []), "tags")),
     )
 
 
-def _turn_from_dict(data: Mapping[str, object]) -> EvalTurn:
+def turn_from_dict(data: Mapping[str, object]) -> EvalTurn:
     input_value = data.get("input")
     messages_value = data.get("messages", [])
     if not isinstance(messages_value, list):
@@ -300,10 +307,10 @@ def _turn_from_dict(data: Mapping[str, object]) -> EvalTurn:
     )
 
 
-def _checks_to_specs(checks: Sequence[object]) -> list[dict[str, object]]:
-    specs: list[dict[str, object]] = []
+def checks_to_specs(checks: Sequence[object]) -> list[dict[str, JSONValue]]:
+    specs: list[dict[str, JSONValue]] = []
     for check in checks:
-        spec: dict[str, object]
+        spec: dict[str, JSONValue]
         if isinstance(check, ExactText):
             spec = {
                 "type": "exact_text",

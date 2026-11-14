@@ -15,12 +15,15 @@ from pathlib import Path
 from .aggregation import RunAggregate
 from .comparison import ComparisonSummary
 from .models import EvalRun
+from .proposals import EvalProposal, FeedbackRecord
 
 _RUN_KIND = "langgraph_instrumentation.eval_run"
 _AGGREGATE_KIND = "langgraph_instrumentation.eval_aggregate"
 _COMPARISON_KIND = "langgraph_instrumentation.eval_comparison"
+_PROPOSAL_KIND = "langgraph_instrumentation.eval_proposal"
+_FEEDBACK_KIND = "langgraph_instrumentation.feedback_record"
 
-Artifact = EvalRun | RunAggregate | ComparisonSummary
+Artifact = EvalRun | RunAggregate | ComparisonSummary | EvalProposal | FeedbackRecord
 
 
 def save_run(run: EvalRun, path: str | Path) -> Path:
@@ -80,8 +83,13 @@ def save_artifacts(objects: Sequence[Artifact], path: str | Path) -> Path:
     if not items:
         raise ValueError("at least one artifact is required")
     for item in items:
-        if not isinstance(item, (EvalRun, RunAggregate, ComparisonSummary)):
-            raise TypeError("artifacts must be EvalRun, RunAggregate or ComparisonSummary records")
+        if not isinstance(
+            item, (EvalRun, RunAggregate, ComparisonSummary, EvalProposal, FeedbackRecord)
+        ):
+            raise TypeError(
+                "artifacts must be EvalRun, RunAggregate, ComparisonSummary, "
+                "EvalProposal or FeedbackRecord records"
+            )
     destination = Path(path)
     if destination.suffix.casefold() != ".jsonl":
         raise ValueError("multi-artifact path must end with .jsonl")
@@ -146,6 +154,40 @@ def _read_json(path: str | Path, expected: type) -> Mapping[str, object]:
     return payload
 
 
+def save_proposal(proposal: EvalProposal, path: str | Path) -> Path:
+    """Save one candidate proposal as canonical JSON."""
+    if not isinstance(proposal, EvalProposal):
+        raise TypeError("proposal must be an EvalProposal")
+    return _write_json(path, proposal.to_dict())
+
+
+def load_proposal(path: str | Path) -> EvalProposal:
+    """Load one candidate proposal; kind and version mismatches fail explicitly."""
+    source = Path(path)
+    payload = _read_json(source, EvalProposal)
+    try:
+        return EvalProposal.from_dict(payload)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid evaluation proposal in {source}: {exc}") from exc
+
+
+def save_feedback(feedback: FeedbackRecord, path: str | Path) -> Path:
+    """Save one feedback record as canonical JSON."""
+    if not isinstance(feedback, FeedbackRecord):
+        raise TypeError("feedback must be a FeedbackRecord")
+    return _write_json(path, feedback.to_dict())
+
+
+def load_feedback(path: str | Path) -> FeedbackRecord:
+    """Load one feedback record; kind and version mismatches fail explicitly."""
+    source = Path(path)
+    payload = _read_json(source, FeedbackRecord)
+    try:
+        return FeedbackRecord.from_dict(payload)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid feedback record in {source}: {exc}") from exc
+
+
 def _check_kind(payload: Mapping[str, object], source: Path, expected: type) -> None:
     if expected is EvalRun:
         expected_kind = _RUN_KIND
@@ -153,6 +195,10 @@ def _check_kind(payload: Mapping[str, object], source: Path, expected: type) -> 
         expected_kind = _AGGREGATE_KIND
     elif expected is ComparisonSummary:
         expected_kind = _COMPARISON_KIND
+    elif expected is EvalProposal:
+        expected_kind = _PROPOSAL_KIND
+    elif expected is FeedbackRecord:
+        expected_kind = _FEEDBACK_KIND
     else:
         raise TypeError(f"unknown artifact type: {expected!r}")
     actual = payload.get("kind")
@@ -179,6 +225,10 @@ def _dispatch(payload: object, source: Path) -> Artifact:
             return RunAggregate.from_dict(payload)
         if kind == _COMPARISON_KIND:
             return ComparisonSummary.from_dict(payload)
+        if kind == _PROPOSAL_KIND:
+            return EvalProposal.from_dict(payload)
+        if kind == _FEEDBACK_KIND:
+            return FeedbackRecord.from_dict(payload)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"invalid evaluation artifact in {source}: {exc}") from exc
     raise ValueError(f"unknown evaluation artifact kind {kind!r}: {source}")

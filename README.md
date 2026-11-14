@@ -161,8 +161,7 @@ Run the offline example with:
 uv run --no-sync python examples/local_eval.py
 ```
 
-Quality comparisons, persisted inspection and agent-facing workflows are delivered
-by the later evaluation slices. Repeated trials aggregate with `aggregate_run`
+Repeated trials aggregate with `aggregate_run`
 (fail-safe `WORST` by default; explicit `BEST`/`MAJORITY` and `MEAN`/`MEDIAN`
 metric policies), and `compare_runs` separates quality from explicit `MetricRule`
 performance gates with tolerance, direction and missing-metric policy. Structured
@@ -185,6 +184,26 @@ uv run --no-sync python -m langgraph_instrumentation evals report run.json --out
 ```
 
 See `docs/evals.md` for the artifact schema, CLI reference and exit codes.
+
+### Agent-facing inspection and evaluation workflows
+
+Coding agents work through bounded, read-only summaries that never require
+internal modules or database access:
+
+```python
+from langgraph_instrumentation import summarize_failures, turn_evidence
+
+summary = summarize_failures(run)  # failed trials, reasons, trace IDs
+evidence = turn_evidence(run, "add", 0, traces=bundles)  # calls, metrics, output
+```
+
+Candidate dataset changes are explicit `EvalProposal` records with rationale,
+evidence references and fully specified cases. They validate structurally,
+record an accept/reject `ReviewRecord` with reviewer provenance, and only then
+merge into golden datasets via `apply_proposal` — collisions fail instead of
+overwriting silently. The packaged walkthrough in
+`docs/agent-eval-workflow.md` runs the full loop offline using only public
+interfaces; no MCP server, agent runtime or hosted service is introduced.
 
 ## View locally
 
