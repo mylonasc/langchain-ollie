@@ -38,6 +38,8 @@ members = []
 addopts = "--strict-config --strict-markers -m 'not perfetto'"
 markers = ["perfetto: requires explicitly provisioned pinned Trace Processor binary"]
 testpaths = ["tests"]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.coverage.run]
 branch = true

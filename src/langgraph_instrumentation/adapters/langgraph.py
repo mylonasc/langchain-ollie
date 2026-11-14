@@ -434,7 +434,7 @@ class LangGraphCallbackHandler(BaseCallbackHandler):
         graph_name = self._safe_optional_text(metadata.get("graph_name"))
         if graph_name is None:
             graph_name = self._safe_optional_text(supplied_name)
-        if metadata.get("ls_integration") == "langgraph" and parent_run_id is None:
+        if metadata.get("ls_integration") in ("langgraph", "deepagents") and parent_run_id is None:
             return SpanKind.GRAPH, self._label("Graph", graph_name or "LangGraph")
         name = self._safe_optional_text(supplied_name) or self._serialized_name(serialized, "chain")
         if metadata.get("graph_name") is not None:

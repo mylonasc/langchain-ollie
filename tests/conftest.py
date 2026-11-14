@@ -1,5 +1,6 @@
 """Default tests are hermetic: no provider credentials or external connections."""
 
+import os
 import runpy
 import socket
 from pathlib import Path
@@ -23,6 +24,23 @@ def offline_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def local_agent():
+def local_agent(monkeypatch):
     example = Path(__file__).resolve().parents[1] / "examples" / "local_agent.py"
+    monkeypatch.syspath_prepend(str(example.parent))
     return runpy.run_path(str(example))["build_agent"]()
+
+
+@pytest.fixture
+def deep_agent_example(monkeypatch):
+    example = Path(__file__).resolve().parents[1] / "examples" / "local_deep_agent.py"
+    monkeypatch.syspath_prepend(str(example.parent))
+    return runpy.run_path(str(example))
+
+
+@pytest.fixture
+def trace_processor() -> str:
+    binary = os.environ.get("PERFETTO_TRACE_PROCESSOR")
+    assert binary and Path(binary).is_file(), (
+        "Provision pinned tooling with scripts/install_perfetto.py and set PERFETTO_TRACE_PROCESSOR"
+    )
+    return binary

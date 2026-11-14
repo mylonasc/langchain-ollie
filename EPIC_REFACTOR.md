@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-- Status: in progress on `epic-refactor`; REF-01 and REF-02 complete, REF-03 next.
+- Status: in progress on `epic-refactor`; REF-01 through REF-03 complete, REF-04 next.
 - Parent issue: [#13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
 - Primary outcome: safe, bounded, offline LangGraph and Deep Agents execution
   traces that can be inspected in Perfetto without a service or credentials.
@@ -146,6 +146,23 @@ stable and may become child issues later; this parent initially tracks the slice
   types, package build, core-only wheel smoke, and installed-wheel agent demo pass.
   Example: `uv run --no-sync python examples/local_agent.py trace.json`.
   Hosted CI is not yet claimed; the implementation commits remain local.
+- REF-03: [#16](https://github.com/mylonasc/langgraph_instrumentation/issues/16).
+  Added a real offline Deep Agent using state-backed write/read tools and explicit
+  delegation to a scripted worker with a local multiplication tool. Shared model
+  support implements finite scripts, tool binding, sync/async generation,
+  fragmented tool-call streaming, copied responses, and once-per-call usage.
+  Required tests cover invoke/ainvoke/stream/astream, nested worker containment,
+  file/output correctness, tool-call IDs, privacy/truncation and repeated isolated
+  invocations in one session. Deep Agents roots are now correctly classified as
+  graphs from their observed `ls_integration="deepagents"` metadata.
+  Verification: 186 default tests pass on Python 3.12/3.13/3.14, plus six actual
+  Perfetto importer tests (including all four Deep Agents execution APIs). Lint,
+  format, types and package build pass. A clean installed-wheel Deep Agents demo
+  and full default/importer suites also pass with current dependencies (LangGraph
+  1.2.22 versus locked 1.2.21). No provider credentials, network or shell tools are
+  used by the scenarios. CI now smoke-tests both installed-wheel examples.
+  Example: `uv run --no-sync python examples/local_deep_agent.py deep-agent-trace.json`.
+  REF-04 pressure/efficiency acceptance remains outstanding; M2 is not yet complete.
 
 ### Useful-state checkpoints
 
@@ -477,7 +494,7 @@ Test infrastructure rules:
 
 - [x] REF-01 — Safety, scope, regression foundation, CI (#14)
 - [x] REF-02 — Modern LangGraph-to-Perfetto MVP; legacy removal (M1, #15)
-- [ ] REF-03 — Real Deep Agents e2e and demo
+- [x] REF-03 — Real Deep Agents e2e and demo (#16)
 - [ ] REF-04 — Bounded efficient recording (M2 with REF-03)
 - [ ] REF-05 — Graph/concurrency/retry/resume semantics
 - [ ] REF-06 — Failure isolation and lifecycle (M3 with REF-05)

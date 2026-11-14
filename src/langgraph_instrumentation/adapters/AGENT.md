@@ -29,8 +29,9 @@ or presentation formats.
   `projection.py`. No cross-recording message deduplication or payload cache.
 - Exceptions retain only type by default. Message capture requires separate
   opt-in plus a content policy; internal logs must never format exceptions.
-- Classic LLM/retriever hooks not required by modern agent e2e are dropped;
-  REF-03 adds actual Deep Agents tools/delegation/streaming, not callback mocks.
+- Classic LLM/retriever hooks not required by modern agent e2e are dropped.
+  Both `ls_integration="langgraph"` and `"deepagents"` identify modern root graphs.
+  REF-03 tests actual Deep Agents tools/delegation/streaming, not callback mocks.
 - Error callbacks must preserve the application's original exception if
   instrumentation also fails. Adapter callback failures are non-fatal by
   default; opt-in `raise_error` is for diagnostics outside application-error

@@ -3,13 +3,12 @@
 import argparse
 from typing import Any
 
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
+from scripted_model import ScriptedModel
 
 from langgraph_instrumentation import RecordingSession
 
@@ -20,41 +19,21 @@ def add(a: int, b: int) -> int:
     return a + b
 
 
-class ScriptedModel(BaseChatModel):
-    """A real chat-model interface with deterministic tool calling, not a provider."""
-
-    calls: int = 0
-
-    @property
-    def _llm_type(self) -> str:
-        return "scripted-local-model"
-
-    def bind_tools(self, tools, *, tool_choice=None, **kwargs):
-        return self
-
-    def _generate(
-        self, messages: list[BaseMessage], stop=None, run_manager=None, **kwargs
-    ) -> ChatResult:
-        self.calls += 1
-        if self.calls > 2:
-            raise AssertionError("unexpected extra model call")
-        if self.calls == 1:
-            message = AIMessage(
+def build_agent() -> Any:
+    model = ScriptedModel(
+        responses=(
+            AIMessage(
                 content="",
                 tool_calls=[{"name": "add", "args": {"a": 2, "b": 3}, "id": "call-add"}],
                 usage_metadata={"input_tokens": 2, "output_tokens": 1, "total_tokens": 3},
-            )
-        else:
-            assert isinstance(messages[-1], ToolMessage)
-            message = AIMessage(
-                content=f"Result: {messages[-1].content}",
+            ),
+            AIMessage(
+                content="Result: 5",
                 usage_metadata={"input_tokens": 3, "output_tokens": 2, "total_tokens": 5},
-            )
-        return ChatResult(generations=[ChatGeneration(message=message)])
-
-
-def build_agent() -> Any:
-    model = ScriptedModel().bind_tools([add])
+            ),
+        ),
+        expectations=(None, ("add", "5")),
+    ).bind_tools([add])
 
     def call_model(state: MessagesState, config: RunnableConfig):
         return {"messages": [model.invoke(state["messages"], config=config)]}

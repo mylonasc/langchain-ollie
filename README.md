@@ -15,7 +15,27 @@ uv run --no-sync python examples/local_agent.py trace.json
 
 The example executes a real LangGraph tool-calling loop with a scripted model and
 local addition tool. It prints `Result: 5` and writes a Perfetto artifact. It never
-calls an LLM provider. Deep Agents runtime coverage is the next slice, REF-03.
+calls an LLM provider.
+
+### Deep Agents, without a provider
+
+```bash
+uv sync --group dev --group agents
+uv run --no-sync python examples/local_deep_agent.py deep-agent-trace.json
+```
+
+This runs a real `deepagents.create_deep_agent` with scripted coordinator and
+worker models. It writes and reads `/report.txt` in a **virtual state filesystem**,
+delegates via `task`, and executes a local multiplication tool in the worker.
+There are no host-file or shell tools and no model-provider fallbacks. The result
+is `Result: 10. Report written and read; worker completed.` The virtual report is
+returned in agent state; no `/report.txt` is written to your computer.
+
+`examples/scripted_model.py` implements tool binding, explicit sync/async methods,
+fragmented tool-call streaming, and usage emitted once per model call. It is
+example/test support, not part of the library API. Both examples use real agent
+runtimes and the same public recording API. User applications can attach it to
+their own Deep Agents through the callback config shown below.
 
 For your own application, install the package with your modern agent runtime:
 
@@ -29,8 +49,11 @@ with RecordingSession() as recording:
 recording.export("trace.json")
 ```
 
-The same callback works with `await app.ainvoke(...)`. Finish consuming streams
-before closing a session. Use one session per bounded recording window; shared
+The same callback works with `await app.ainvoke(...)`, `app.stream(...)`, and
+`app.astream(...)`. Finish consuming streams before closing a session. Deep Agents
+e2e tests cover all four methods, nested worker chunks, token accounting, privacy,
+and repeated runs sharing the callback. Per-token event capture stays disabled by
+default. Use one session per bounded recording window; concurrent shared
 handler invocation semantics are being expanded in REF-05.
 
 ## View locally
@@ -142,7 +165,7 @@ ingest artifacts, and assert slices, counters, flows, and importer error statist
 ## Roadmap and alternatives
 
 See [`EPIC_REFACTOR.md`](EPIC_REFACTOR.md) and [epic #13](https://github.com/mylonasc/langgraph_instrumentation/issues/13).
-SQLite, graph dependency links, expanded Deep Agents e2e and release hardening
+SQLite, graph dependency links, bounded hot-path improvements and release hardening
 follow the initial local workflow. CPU/RSS counters, profiler correlation, and
 OpenTelemetry monitoring are lower-priority opt-in follow-ups, not core requirements.
 
