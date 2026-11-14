@@ -1,0 +1,223 @@
+"""Offline CLI tests: thin Python-API surface, exit codes, offline HTML."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from langgraph_instrumentation import (
+    EvalAssessment,
+    EvalCase,
+    EvalExecutionStatus,
+    EvalMetrics,
+    EvalRun,
+    EvalStatus,
+    EvalTrial,
+    EvalTurn,
+    EvalTurnResult,
+    ExactText,
+    save_cases,
+    save_run,
+)
+from langgraph_instrumentation.evals.cli import main as evals_main
+
+EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
+
+
+def _dataset(path: Path) -> Path:
+    destination = path / "cases.json"
+    save_cases(
+        [
+            EvalCase(
+                case_id="add",
+                turns=(EvalTurn.user("Add 2 and 3", checks=(ExactText("Result: 5"),)),),
+            )
+        ],
+        destination,
+    )
+    return destination
+
+
+def _scripted_module(path: Path) -> None:
+    (path / "tiny_agent.py").write_text(
+        "from langchain_core.messages import AIMessage\n"
+        "\n"
+        "class TinyApp:\n"
+        "    def invoke(self, payload, config=None):\n"
+        '        return {"messages": [AIMessage(content="Result: 5")]}\n'
+        "\n"
+        "def build():\n"
+        "    return TinyApp()\n",
+        encoding="utf-8",
+    )
+
+
+def _run(run_id: str, status: EvalStatus, extra_ns: int = 1) -> EvalRun:
+    turn = EvalTurnResult(
+        index=0,
+        input={"messages": [["user", "x"]]},
+        execution_status=EvalExecutionStatus.COMPLETED,
+        assessments=(EvalAssessment("check", status),),
+        metrics=EvalMetrics(),
+    )
+    trial = EvalTrial(
+        case_id="a",
+        trial_index=0,
+        execution_status=EvalExecutionStatus.COMPLETED,
+        turns=(turn,),
+    )
+    return EvalRun(run_id=run_id, trials=(trial,), started_unix_ns=0, finished_unix_ns=extra_ns)
+
+
+def test_run_executes_real_agent_and_saves_canonical_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: Any
+) -> None:
+    monkeypatch.syspath_prepend(str(EXAMPLES))
+    dataset = _dataset(tmp_path)
+    out = tmp_path / "run.json"
+    code = evals_main(
+        ["run", str(dataset), "--agent", "local_agent:build_agent", "--out", str(out)]
+    )
+    assert code == 0
+    assert out.is_file()
+    document = json.loads(capsys.readouterr().out)
+    assert document == {
+        "run": str(out),
+        "run_id": document["run_id"],
+        "passed": True,
+        "trials": 1,
+        "failed_cases": [],
+    }
+
+
+def test_run_supports_module_factory_entrypoints(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: Any
+) -> None:
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _scripted_module(tmp_path)
+    out = tmp_path / "run.json"
+    code = evals_main(
+        ["run", str(_dataset(tmp_path)), "--agent", "tiny_agent:build", "--out", str(out)]
+    )
+    assert code == 0
+    assert json.loads(capsys.readouterr().out)["passed"] is True
+
+
+def test_run_rejects_unknown_agent(tmp_path: Path, capsys: Any) -> None:
+    code = evals_main(
+        [
+            "run",
+            str(_dataset(tmp_path)),
+            "--agent",
+            "no_such_module:build",
+            "--out",
+            str(tmp_path / "run.json"),
+        ]
+    )
+    assert code == 2
+    assert "error" in capsys.readouterr().err
+
+
+def test_cases_lists_and_inspects(tmp_path: Path, capsys: Any) -> None:
+    dataset = _dataset(tmp_path)
+    assert evals_main(["cases", str(dataset)]) == 0
+    listed = json.loads(capsys.readouterr().out)
+    assert listed["cases"] == [{"case_id": "add", "turns": 1, "checks": 1}]
+
+    assert evals_main(["cases", str(dataset), "--case", "add"]) == 0
+    detail = json.loads(capsys.readouterr().out)
+    assert detail["case_id"] == "add"
+
+    assert evals_main(["cases", str(dataset), "--case", "missing"]) == 2
+
+
+def test_show_reports_saved_run(tmp_path: Path, capsys: Any) -> None:
+    run_path = tmp_path / "run.json"
+    save_run(_run("base", EvalStatus.PASS), run_path)
+    assert evals_main(["show", str(run_path)]) == 0
+    document = json.loads(capsys.readouterr().out)
+    assert document["passed"] is True
+    assert document["cases"][0] == {
+        "case_id": "a",
+        "passed": True,
+        "pass_rate": 1.0,
+        "trials": 1,
+        "execution_failures": 0,
+        "assessment_errors": 0,
+    }
+    assert evals_main(["show", str(tmp_path / "absent.json")]) == 2
+
+
+def test_compare_gate_exit_codes_and_stable_output(tmp_path: Path, capsys: Any) -> None:
+    base, same, worse = (
+        tmp_path / "base.json",
+        tmp_path / "same.json",
+        tmp_path / "worse.json",
+    )
+    save_run(_run("base", EvalStatus.PASS, 1), base)
+    save_run(_run("same", EvalStatus.PASS, 1), same)
+    save_run(_run("worse", EvalStatus.FAIL, 1), worse)
+
+    assert evals_main(["compare", str(base), str(same)]) == 0
+    first = capsys.readouterr().out
+    assert evals_main(["compare", str(base), str(same)]) == 0
+    assert capsys.readouterr().out == first
+
+    assert evals_main(["compare", str(base), str(worse)]) == 1
+    regressed = json.loads(capsys.readouterr().out)
+    assert regressed["regressed_case_ids"] == ["a"]
+
+    out = tmp_path / "comparison.json"
+    assert evals_main(["compare", str(base), str(worse), "--out", str(out)]) == 1
+    assert out.is_file()
+
+    assert evals_main(["compare", str(base), str(worse), "--rule", "x:bogus"]) == 2
+    assert evals_main(["compare", str(base), str(worse), "--rule", "x"]) == 2
+
+
+def test_validate_accepts_and_rejects(tmp_path: Path, capsys: Any) -> None:
+    dataset = _dataset(tmp_path)
+    assert evals_main(["validate", str(dataset)]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "file": str(dataset),
+        "kind": "dataset",
+        "valid": True,
+        "cases": 1,
+    }
+
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"kind": "nope", "schema_version": "1"}), encoding="utf-8")
+    assert evals_main(["validate", str(bad)]) == 1
+    assert json.loads(capsys.readouterr().out)["valid"] is False
+
+    assert evals_main(["validate", str(tmp_path / "missing.json")]) == 2
+
+
+def test_report_writes_offline_html(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.syspath_prepend(str(EXAMPLES))
+    run_path = tmp_path / "run.json"
+    assert (
+        evals_main(
+            [
+                "run",
+                str(_dataset(tmp_path)),
+                "--agent",
+                "local_agent:build_agent",
+                "--out",
+                str(run_path),
+            ]
+        )
+        == 0
+    )
+    report = tmp_path / "report.html"
+    assert evals_main(["report", str(run_path), "--out", str(report)]) == 0
+    document = report.read_text(encoding="utf-8")
+    assert "<html" in document
+    assert "add" in document
+    assert "tokens.total" in document
+    assert "0123456789abcdef" not in document
+    assert "http" not in document
+    assert "<script" not in document

@@ -10,7 +10,7 @@ from .models import TraceQuery
 from .stores.sqlite import SQLiteTraceStore
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("list", "summary", "export", "recover"):
@@ -23,7 +23,13 @@ def main() -> None:
         if name == "list":
             sub.add_argument("--limit", type=int, default=100)
             sub.add_argument("--offset", type=int, default=0)
+    evals_cmd = commands.add_parser("evals", help="local evaluation artifacts and gates")
+    evals_cmd.add_argument("args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
+    if args.command == "evals":
+        from .evals.cli import main as evals_main
+
+        return evals_main(args.args)
     if not args.database.is_file():
         parser.error("recording database does not exist")
     store = SQLiteTraceStore(args.database, read_only=args.command != "recover")
@@ -60,7 +66,8 @@ def main() -> None:
                 )
     finally:
         store.close()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

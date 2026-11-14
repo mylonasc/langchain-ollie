@@ -75,6 +75,7 @@ def test_public_api_is_explicit() -> None:
         "load_cases",
         "measure_traces",
         "save_cases",
+        "Artifact",
         "CaseAggregate",
         "CaseComparison",
         "ComparisonKind",
@@ -93,7 +94,18 @@ def test_public_api_is_explicit() -> None:
         "StatePredicate",
         "TrialAggregation",
         "aggregate_run",
+        "canonical_json",
         "compare_runs",
+        "load_aggregate",
+        "load_any",
+        "load_artifacts",
+        "load_comparison",
+        "load_run",
+        "render_report",
+        "save_aggregate",
+        "save_artifacts",
+        "save_comparison",
+        "save_run",
     ]
 
 

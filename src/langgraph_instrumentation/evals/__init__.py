@@ -13,6 +13,19 @@ from .aggregation import (
     TrialAggregation,
     aggregate_run,
 )
+from .artifacts import (
+    Artifact,
+    canonical_json,
+    load_aggregate,
+    load_any,
+    load_artifacts,
+    load_comparison,
+    load_run,
+    save_aggregate,
+    save_artifacts,
+    save_comparison,
+    save_run,
+)
 from .comparison import (
     DEFAULT_IDENTITY_KEYS,
     CaseComparison,
@@ -58,9 +71,11 @@ from .models import (
     MetricScope,
     MissingMetricPolicy,
 )
+from .report import render_report
 from .runner import EvalRunner
 
 __all__ = [
+    "Artifact",
     "AsyncExecutionAdapter",
     "CaseAggregate",
     "CaseComparison",
@@ -108,8 +123,19 @@ __all__ = [
     "TrialAggregation",
     "aggregate_run",
     "aggregate_turn_metrics",
+    "canonical_json",
     "compare_runs",
+    "load_aggregate",
+    "load_any",
+    "load_artifacts",
     "load_cases",
+    "load_comparison",
+    "load_run",
     "measure_traces",
+    "render_report",
+    "save_aggregate",
+    "save_artifacts",
     "save_cases",
+    "save_comparison",
+    "save_run",
 ]

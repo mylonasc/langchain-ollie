@@ -169,6 +169,23 @@ performance gates with tolerance, direction and missing-metric policy. Structure
 state checks use `StatePredicate`; optional judges adapt via `JudgeEvaluator`
 without adding a provider dependency.
 
+Runs, aggregates and comparisons persist as canonical JSON through `save_run`,
+`save_aggregate`, `save_comparison` (or mixed JSONL via `save_artifacts`) and
+reopen with `load_run`, `load_aggregate`, `load_comparison`, `load_any` and
+`load_artifacts`. Artifacts reference traces by ID and never embed payloads.
+The same operations are available offline from the command line, including a
+static HTML report and CI-friendly exit codes:
+
+```bash
+uv run --no-sync python -m langgraph_instrumentation evals run cases.json \
+  --agent mymodule:build_app --out run.json
+uv run --no-sync python -m langgraph_instrumentation evals compare base.json run.json \
+  --rule "tokens.total:lower_is_better:10:0.05"
+uv run --no-sync python -m langgraph_instrumentation evals report run.json --out report.html
+```
+
+See `docs/evals.md` for the artifact schema, CLI reference and exit codes.
+
 ## View locally
 
 Open Perfetto and use **Open trace file**. For sensitive data or air-gapped work,

@@ -18,8 +18,12 @@
 - Evaluation quality slice: fail-safe repeated-trial aggregation, baseline
   comparison with explicit metric rules/tolerances/directions, structured state
   predicates and an optional provider-free judge protocol. Execution, assessment
-  and missing-evidence outcomes stay distinct. Persisted inspection and
-  agent-facing workflows remain in the indexed evaluation slices.
+  and missing-evidence outcomes stay distinct.
+- Portable evaluation artifacts and local inspection: canonical JSON run,
+  aggregate and comparison artifacts (plus mixed JSONL), a thin CLI over the
+  public Python API with machine-readable output and CI gate exit codes, and a
+  static offline HTML report. Agent-facing workflows remain in the indexed
+  evaluation slices.
 
 ### Upgrade from the prototype
 
