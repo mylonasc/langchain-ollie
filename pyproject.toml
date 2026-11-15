@@ -48,6 +48,14 @@ agents = [
 ]
 resources = ["psutil>=7.0,<9"]
 
+notebooks = [
+    "ipykernel>=6.30,<8",
+    "jupyterlab>=4.4,<5",
+    "nbclient>=0.10,<1",
+    "nbformat>=5.10,<6",
+    "viztracer>=1.1.1,<1.2",
+]
+
 # Keep this repository self-contained even when cloned below another uv workspace.
 [tool.uv.workspace]
 members = []
@@ -76,6 +84,14 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# Notebook imports can support later interactive cells; shell commands stay intact.
+"notebooks/*.ipynb" = ["F401", "E501"]
+
+[tool.ruff.format]
+# Preserve manually edited notebook cells and saved output formatting.
+exclude = ["notebooks/*.ipynb"]
 
 [tool.ty.src]
 include = ["src/langchain_ollie", "tests"]

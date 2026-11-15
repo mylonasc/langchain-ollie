@@ -11,6 +11,10 @@ without API keys or model-provider calls. Next, learn to
 [read the Perfetto timeline](../README.md#view-locally) and choose
 [safe capture limits](../README.md#safety-and-recording-limits).
 
+For an interactive walkthrough, [run the multi-tool notebook](../notebooks/README.md)
+to see live application logs, create a trace and open a VizTracer report in your
+browser.
+
 ## Evaluate and improve an agent
 
 Use the [evaluation guide](evals.md) to define cases, check answers and execution

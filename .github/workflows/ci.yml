@@ -51,6 +51,39 @@ jobs:
           mkdir /tmp/wheel-work
           cd /tmp/wheel-work
           /tmp/wheel-smoke/bin/python "$GITHUB_WORKSPACE/scripts/wheel_smoke.py" "$GITHUB_WORKSPACE"
+  notebooks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.21'
+          python-version: '3.12'
+      - run: uv sync --locked --group dev --group notebooks
+      - run: uv run --no-sync pytest tests/test_notebook.py
+      - name: Execute non-interactive cells in a disposable notebook copy
+        run: |
+          uv run --no-sync python - <<'PY'
+          import tempfile
+          from pathlib import Path
+
+          import nbformat
+          from nbclient import NotebookClient
+
+          notebook = nbformat.read("notebooks/01_langgraph_multi_tool_trace.ipynb", as_version=4)
+          for cell in notebook.cells:
+              if cell.cell_type == "code" and any(
+                  line.lstrip().startswith(("!", "%")) for line in cell.source.splitlines()
+              ):
+                  cell.metadata.setdefault("tags", []).append("skip-execution")
+          with tempfile.TemporaryDirectory() as directory:
+              NotebookClient(
+                  notebook, timeout=120, kernel_name="python3",
+                  resources={"metadata": {"path": directory}},
+              ).execute()
+              nbformat.write(notebook, Path(directory) / "executed.ipynb")
+          PY
   perfetto:
     runs-on: ubuntu-latest
     timeout-minutes: 10

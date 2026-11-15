@@ -15,14 +15,16 @@ construction stay unchanged.
 
 ## Why Ollie?
 
-Agent optimization is not just about choosing a faster model. Excessive token use
-can come from repeated model calls, unnecessary tool round trips, or the context
-supplied at each step. Ollie brings reported token usage together with execution
-structure so you can locate expensive patterns and test changes to context
-engineering and agent tool design. For example, compare a tighter context strategy
+Agent optimization is not just about choosing a faster model or optimizing its prompt.
+Excessive token use and token waste can come from repeated model calls, unnecessary 
+tool round trips, or low information context supplied at each step. Ollie brings 
+reported token usage together with execution structure so you can locate expensive patterns
+and quantify the impact of changes to context engineering and agent tool design. 
+For example, compare a tighter context strategy, a summarization or context truncation strategy, 
 or a tool that returns more focused results, then check whether token use and call
-counts improve without sacrificing answer quality. Inspecting prompt or tool
-content requires explicit capture; bodies are not recorded by default.
+counts improve without sacrificing answer quality. 
+
+> **_NOTE_** Inspecting prompt or tool content requires explicit capture; bodies are not recorded by default. It is recommended for local tracing to prefer capturing the bodies as well, for deeper analysis.
 
 Portable visual inspection keeps the investigation close to the code: export a
 trace file and open it in Perfetto to explore nested operations, overlapping work
@@ -111,6 +113,10 @@ scope, `config={"callbacks": [recording.handler]}` on invocation, and
 `recording.export(...)` afterward. Your agent and model construction stay unchanged.
 
 ## More runnable examples
+
+For an interactive example, use the [multi-tool tracing notebook](notebooks/README.md):
+run a LangGraph agent, watch live logs, export a trace and inspect it in your browser with
+VizTracer.
 
 Use these examples to see tool calls and delegated agents in a trace before
 instrumenting your own application. They run on Python 3.12–3.14, standard

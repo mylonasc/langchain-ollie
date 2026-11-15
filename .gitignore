@@ -14,3 +14,5 @@ dist/
 *.sqlite
 *.sqlite3
 *_trace.json
+.ipynb_checkpoints/
+notebook-artifacts/
