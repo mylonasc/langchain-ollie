@@ -7,7 +7,7 @@ vulnerability. This library is not a sandbox: run only tools and plugins you tru
 ## Reporting a vulnerability
 
 Keep sensitive evidence out of public issues. Report vulnerabilities through
-[GitHub's private reporting channel](https://github.com/mylonasc/langgraph_instrumentation/security/advisories/new).
+[GitHub's private reporting channel](https://github.com/mylonasc/langchain-ollie/security/advisories/new).
 
 Do not post credentials, prompts, tool data, databases or private traces in public
 issues. If private reporting is unavailable, open an issue requesting a private

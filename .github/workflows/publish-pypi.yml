@@ -1,0 +1,83 @@
+name: Publish to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish (must match pyproject.toml)
+        required: true
+        type: string
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-pypi
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Validate and build distributions
+    if: >-
+      github.repository == 'mylonasc/langchain-ollie' &&
+      (github.event_name == 'release' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: '0.12.21'
+          python-version: '3.12'
+          enable-cache: true
+      - run: uv sync --locked --group dev --group agents --group resources --group otel
+      - name: Check release identity
+        env:
+          EXPECTED_VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
+        run: |
+          uv run --no-sync python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          expected = os.environ["EXPECTED_VERSION"].removeprefix("v")
+          if project["name"] != "langchain-ollie":
+              raise SystemExit("unexpected distribution name")
+          if project["version"] != expected:
+              raise SystemExit("release version does not match pyproject.toml")
+          print(f"Publishing {project['name']} {expected}")
+          PY
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+      - run: uv run --no-sync ty check
+      - run: uv run --no-sync pytest
+      - run: uv run --no-sync pytest -m otel
+      - run: uv build --out-dir dist
+      - name: Retain validated distributions
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pypi-distributions
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish with PyPI trusted publishing
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+    steps:
+      - name: Retrieve validated distributions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pypi-distributions
+          path: dist
+      - name: Publish distributions and attestations
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1

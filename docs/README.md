@@ -52,4 +52,6 @@ Decision records explain limits that may affect your integration:
   does not provide distributed context propagation.
 
 For code changes, follow the [development verification steps](../README.md#development-and-artifact-verification)
-and [repository contributor guide](../AGENTS.md).
+and [repository contributor guide](../AGENTS.md). Maintainers can use the
+[publishing guide](publishing.md) to release validated packages through PyPI
+trusted publishing.

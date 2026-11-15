@@ -50,8 +50,8 @@ Start with the quickstart below, then choose your next task:
 Create your first trace with a local scripted model, so you can learn the recording
 API without API keys or provider calls. From a checkout of this repository,
 install dependencies (Python 3.12–3.14). The distribution is named
-`langchain-ollie`, and Python imports use `langchain_ollie`. Install this checkout
-to use the current unreleased version:
+`langchain-ollie`, and Python imports use `langchain_ollie`. Use the checkout to
+run the bundled examples:
 
 ```bash
 uv sync --group dev --group agents

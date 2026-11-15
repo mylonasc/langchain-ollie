@@ -22,9 +22,9 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/mylonasc/langgraph_instrumentation"
-Issues = "https://github.com/mylonasc/langgraph_instrumentation/issues"
-Changelog = "https://github.com/mylonasc/langgraph_instrumentation/blob/main/CHANGELOG.md"
+Repository = "https://github.com/mylonasc/langchain-ollie"
+Issues = "https://github.com/mylonasc/langchain-ollie/issues"
+Changelog = "https://github.com/mylonasc/langchain-ollie/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 resources = ["psutil>=7.0,<9"]

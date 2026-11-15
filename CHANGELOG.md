@@ -4,7 +4,7 @@ Use these notes to understand changes in behavior and plan upgrades. For a first
 integration, start with the [quickstart](README.md#quickstart-trace-a-langgraph-agent);
 for component responsibilities, see the [architecture overview](docs/architecture.md).
 
-## 0.1.0 — local-first API (unreleased)
+## 0.1.0 — local-first API (2026-11-15)
 
 This release replaces the prototype with explicit recording sessions, local
 artifacts and evaluations built on the same execution evidence.
