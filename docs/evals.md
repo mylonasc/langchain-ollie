@@ -4,6 +4,10 @@ Local-first persistence, inspection and regression gates for the evaluation
 framework. Everything here is offline: JSON files on disk, a static HTML report
 and process exit codes. No server, database or network access.
 
+For how execution adapters, recording sessions and evaluators work together, see
+the [evaluation class diagram](uml.md#evaluation-classes) and
+[architecture overview](architecture.md#evaluations-build-on-tracing).
+
 ## Artifacts
 
 Three versioned kinds, each with a `kind` marker and a `schema_version`:

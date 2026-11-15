@@ -72,6 +72,9 @@ scope, `config={"callbacks": [recording.handler]}` on invocation, and
 
 ## More runnable examples
 
+For the design behind the API, see the [architecture overview](docs/architecture.md)
+and [UML class and interaction diagrams](docs/uml.md).
+
 Python 3.12–3.14, standard GIL-enabled CPython:
 
 ```bash
