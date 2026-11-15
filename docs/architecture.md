@@ -13,15 +13,16 @@ classes, protocols and runtime interactions in more detail.
 ## Data flow
 
 ```mermaid
+%%{init: {"flowchart": {"htmlLabels": false}}}%%
 flowchart TB
-    app["Your LangGraph / Deep Agents application"]
+    app["Your LangGraph /<br/>Deep Agents application"]
 
-    subgraph local["Local recording — assembled by RecordingSession"]
+    subgraph local["RecordingSession · local recording"]
         direction TB
-        adapter["LangGraphCallbackHandler<br/>Classify callbacks · project payloads · redact"]
-        recorder["TraceRecorder<br/>Correlate IDs · manage lifecycle · enforce budgets"]
-        store[("TraceStore<br/>Memory by default / optional SQLite")]
-        snapshot["Immutable TraceBundle snapshots<br/>Trace · Span · SpanEvent · MetricPoint"]
+        adapter["LangGraphCallbackHandler<br/>Classify callbacks<br/>Project payloads and redact"]
+        recorder["TraceRecorder<br/>Correlate IDs<br/>Manage span lifecycle<br/>Enforce budgets"]
+        store[("TraceStore<br/>Memory by default<br/>Optional SQLite")]
+        snapshot["Immutable TraceBundle<br/>snapshots<br/>Trace · Span<br/>SpanEvent · MetricPoint"]
         adapter -->|"safe recorder operations"| recorder
         recorder -->|"neutral record writes"| store
         store -->|"session.snapshot()"| snapshot
@@ -30,12 +31,12 @@ flowchart TB
     subgraph outputs["Inspect and evaluate"]
         direction LR
         perfetto["PerfettoExporter<br/>Local JSON timeline"]
-        evals["Evaluation layer<br/>Measurements · checks · regression gates"]
+        evals["Evaluation layer<br/>Measurements and checks<br/>Regression gates"]
     end
 
     subgraph optional["Explicit opt-in integrations"]
-        sampler["ProcessSampler<br/>Process-wide resource counters"]
-        otel["OpenTelemetryProcessor<br/>Completed spans → supplied SDK exporter"]
+        sampler["ProcessSampler<br/>Process-wide<br/>resource counters"]
+        otel["OpenTelemetryProcessor<br/>Completed spans to<br/>supplied SDK exporter"]
     end
 
     app -->|"explicit callbacks config"| adapter
