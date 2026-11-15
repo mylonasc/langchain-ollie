@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     DeterministicClock,
     DeterministicIdGenerator,
     MemoryTraceStore,
@@ -65,7 +65,7 @@ def test_deterministic_compact_output_and_atomic_failure(tmp_path, monkeypatch) 
     def fail(*args):
         raise OSError("synthetic replace failure")
 
-    monkeypatch.setattr("langgraph_instrumentation.exporters.perfetto.os.replace", fail)
+    monkeypatch.setattr("langchain_ollie.exporters.perfetto.os.replace", fail)
     with pytest.raises(OSError):
         exporter.export(bundles, destination)
     assert destination.read_text() == "original"

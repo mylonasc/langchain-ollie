@@ -3,7 +3,7 @@ from dataclasses import replace
 
 import pytest
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     MemoryTraceStore,
     MetricPoint,
     Span,

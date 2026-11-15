@@ -3,9 +3,9 @@ requires = ["uv_build>=0.12.0,<0.13.0"]
 build-backend = "uv_build"
 
 [project]
-name = "langgraph-instrumentation"
+name = "langchain-ollie"
 version = "0.1.0"
-description = "Modular tracing and observability instrumentation for LangGraph agents"
+description = "Local tracing and evaluation for LangGraph and Deep Agents"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -24,7 +24,7 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/mylonasc/langgraph_instrumentation"
 Issues = "https://github.com/mylonasc/langgraph_instrumentation/issues"
-Changelog = "https://github.com/mylonasc/langgraph_instrumentation/blob/epic-refactor/CHANGELOG.md"
+Changelog = "https://github.com/mylonasc/langgraph_instrumentation/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 resources = ["psutil>=7.0,<9"]
@@ -64,7 +64,7 @@ asyncio_default_fixture_loop_scope = "function"
 
 [tool.coverage.run]
 branch = true
-source = ["langgraph_instrumentation"]
+source = ["langchain_ollie"]
 
 [tool.coverage.report]
 show_missing = true
@@ -78,4 +78,4 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.ty.src]
-include = ["src/langgraph_instrumentation", "tests"]
+include = ["src/langchain_ollie", "tests"]

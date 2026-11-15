@@ -9,7 +9,7 @@ import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from perfetto_support import assert_imported_spans, query
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     CaptureMode,
     CapturePolicy,
     RecordingSession,

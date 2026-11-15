@@ -30,7 +30,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from scripted_model import ScriptedModel
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     EvalCase,
     EvalRunner,
     EvalTurn,

@@ -3,7 +3,7 @@ import json
 import tracemalloc
 from typing import Any, cast
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     DeterministicClock,
     MemoryTraceStore,
     RecordingLimits,
@@ -92,7 +92,7 @@ def test_active_cap_and_cooperative_expiration_reclaim_payloads():
 
 
 def test_event_appends_do_not_rebuild_spans(monkeypatch):
-    import langgraph_instrumentation.models as models
+    import langchain_ollie.models as models
 
     store = MemoryTraceStore()
     recorder = TraceRecorder(store)
@@ -142,7 +142,7 @@ def test_dropped_pressure_does_not_retain_caller_payloads():
 
 
 def test_real_stream_summary_and_capped_detail(local_agent):
-    from langgraph_instrumentation import CapturePolicy, RecordingSession
+    from langchain_ollie import CapturePolicy, RecordingSession
 
     with RecordingSession(
         capture=CapturePolicy.bounded(),

@@ -7,7 +7,7 @@ from typing import Any, cast
 import pytest
 from perfetto_support import assert_imported_spans, query
 
-from langgraph_instrumentation import CapturePolicy, RecordingSession, SpanKind
+from langchain_ollie import CapturePolicy, RecordingSession, SpanKind
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])

@@ -6,7 +6,7 @@ from typing import Any, cast
 import pytest
 from test_store_contract import finish, make_span, make_trace
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     MemoryTraceStore,
     MetricPoint,
     SpanEvent,

@@ -1,4 +1,4 @@
-"""LangGraph tracing and observability instrumentation."""
+"""Ollie: local tracing and evaluation for LangGraph and Deep Agents."""
 
 from .adapters import LangGraphCallbackHandler
 from .adapters.projection import MessageProjector

@@ -6,7 +6,7 @@ import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
-from langgraph_instrumentation import TraceBundle
+from langchain_ollie import TraceBundle
 
 
 def query(binary: str, artifact: Path, sql: str) -> list[dict[str, str]]:

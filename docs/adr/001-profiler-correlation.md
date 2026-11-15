@@ -3,7 +3,23 @@
 Status: accepted no-go; 2026-11-14. No sampling engine or production
 attach integration is added. Revisit only with evidenced timestamp/process domains.
 
+## Why this decision matters
+
+Execution traces show how long operations take, while sampled profiles help
+explain which code was running. Combining them on one timeline would be useful
+only if samples could be assigned to spans reliably. The reviewed profile format
+does not preserve enough timing information to make that assignment.
+
+Use [local traces](../../README.md#view-locally) for operation structure and
+[process counters](../../README.md#optional-process-resource-counters) for aligned
+process-wide resource measurements. A separately collected stack profile remains
+a companion view, not evidence of exact per-task CPU usage.
+
 ## Spike evidence
+
+The important question is whether exported samples preserve their positions in
+elapsed time. The format review and ambiguity test below show why a shared start
+time alone cannot recover those positions.
 
 Reviewed maintained [py-spy documentation](https://github.com/benfred/py-spy), its
 [`src/speedscope.rs`](https://github.com/benfred/py-spy/blob/master/src/speedscope.rs),
@@ -15,12 +31,10 @@ clock UUID, or a robust process-start identity. Idle filtering, missed samples,
 thread start offsets and sampling error can remove wall-clock gaps. A start-time
 anchor alone cannot reconstruct those gaps. The format also permits non-time units.
 
-`tests/test_profiler_spike.py` provides two distinct elapsed-time schedules which
+[The ambiguity test](../../tests/test_profiler_spike.py) provides two distinct elapsed-time schedules which
 serialize to identical sampled profiles. Even a common start anchor cannot tell
-which span contained the second sample. This is not a golden-file visual guess.
-No external sample inspector was run: the task did not explicitly authorize attach
-or reading another process's memory. No sudo, ptrace/security-policy changes,
-`--locals`, `--subprocesses`, native inspection or production attachment occurred.
+which span contained the second sample. This evidence comes from format analysis
+and a synthetic test, not a live profiler-fidelity or overhead measurement.
 
 ## Decision
 
@@ -29,7 +43,8 @@ exact per-task CPU attribution, or promising cross-process monotonic alignment.
 An SDK conversion cannot recover missing information. Adding a bespoke sampler
 would duplicate maintained tools and expand privacy, ABI and lifecycle risks.
 Keep the existing Perfetto artifact and a clearly separate Speedscope companion.
-Process counters remain the supported time-aligned resource path.
+Process counters remain the supported time-aligned resource path. This avoids
+presenting an ambiguous overlay as measured execution evidence.
 
 Reopen this ADR only for a maintained profiler format with real sample timestamps,
 an explicit process identity and measured clock-domain anchors/uncertainty. Future
@@ -39,6 +54,10 @@ profiling plus conversion overhead. A correlation fixture is not sufficient proo
 of a live profiler's fidelity.
 
 ## Reproducible external workflow (user-run only)
+
+If you need stack-level insight, collect a separate profile only for a workload
+you are authorized to inspect. This workflow does not add profile collection or
+parsing to the library.
 
 For a disposable, explicitly authorized local workload, install py-spy separately
 in an isolated tool environment and consult `py-spy record --help`. A representative
@@ -60,11 +79,14 @@ keep output private or sanitize using reviewed tooling. Never enable locals.
 
 Measure repeated baseline vs profiled runtime and peak RSS on the same machine;
 report versions, workload, rate, duration, errors and sampling mode. No py-spy
-overhead number is claimed by this spike because no inspection was authorized.
-The offline ambiguity fixture takes <1 ms locally and imposes zero production
-overhead: no profiler/correlator is installed or loaded by the core.
+overhead number is claimed here because no live profiling measurement was made.
+The core does not load a profiler or correlator. Apply the
+[artifact-handling guidance](../../SECURITY.md#protecting-recordings) to both outputs.
 
 ## Platform limits
+
+Profiler permissions and runtime support are separate from tracing support.
+Do not weaken host security settings to make an optional companion profile work.
 
 Upstream advertises recent CPython on Linux/macOS/Windows/FreeBSD, but ABI/build,
 architecture and permission details matter. Linux containers often deny memory

@@ -6,8 +6,8 @@ import threading
 import pytest
 from perfetto_support import query
 
-from langgraph_instrumentation import RecordingLimits, RecordingSession
-from langgraph_instrumentation.resources import ProcessReading, ProcessSampler
+from langchain_ollie import RecordingLimits, RecordingSession
+from langchain_ollie.resources import ProcessReading, ProcessSampler
 
 
 class Source:
@@ -60,9 +60,9 @@ def test_default_import_does_not_load_sampler_or_psutil():
             sys.executable,
             "-c",
             (
-                "import sys; import langgraph_instrumentation; "
+                "import sys; import langchain_ollie; "
                 "assert 'psutil' not in sys.modules; "
-                "assert 'langgraph_instrumentation.resources' not in sys.modules"
+                "assert 'langchain_ollie.resources' not in sys.modules"
             ),
         ],
         capture_output=True,
@@ -95,8 +95,8 @@ def test_real_process_cpu_memory_work_in_subprocess():
             sys.executable,
             "-c",
             """
-from langgraph_instrumentation import RecordingSession
-from langgraph_instrumentation.resources import ProcessSampler
+from langchain_ollie import RecordingSession
+from langchain_ollie.resources import ProcessSampler
 with RecordingSession() as session:
     sampler = ProcessSampler(session.recorder).start(background=False)
     assert sampler.sample_once()

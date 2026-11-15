@@ -34,7 +34,7 @@ jobs:
       - run: uv run --no-sync ruff check .
       - run: uv run --no-sync ruff format --check .
       - run: uv run --no-sync ty check
-      - run: uv run --no-sync pytest --cov=langgraph_instrumentation
+      - run: uv run --no-sync pytest --cov=langchain_ollie
       - run: uv build --out-dir dist
       - name: Install wheel and import outside checkout
         shell: bash
@@ -42,7 +42,7 @@ jobs:
           uv venv --python '${{ matrix.python }}' /tmp/wheel-smoke
           uv pip install --python /tmp/wheel-smoke/bin/python dist/*.whl
           cd /tmp
-          /tmp/wheel-smoke/bin/python -c 'import langgraph_instrumentation'
+          /tmp/wheel-smoke/bin/python -c 'import langchain_ollie'
           uv pip install --python /tmp/wheel-smoke/bin/python 'langgraph>=1.2.21,<1.3'
           uv pip install --python /tmp/wheel-smoke/bin/python 'deepagents>=0.7.38,<0.8'
           if [[ '${{ matrix.dependencies }}' == 'minimum' ]]; then

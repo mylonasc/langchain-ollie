@@ -1,9 +1,17 @@
-import langgraph_instrumentation
-from langgraph_instrumentation import stores
+from importlib import metadata, resources
+
+import langchain_ollie
+from langchain_ollie import stores
+
+
+def test_distribution_and_typed_package_use_langchain_ollie_namespace() -> None:
+    assert metadata.metadata("langchain-ollie")["Name"] == "langchain-ollie"
+    assert langchain_ollie.RecordingSession.__module__ == "langchain_ollie.session"
+    assert resources.files(langchain_ollie).joinpath("py.typed").is_file()
 
 
 def test_public_api_is_explicit() -> None:
-    assert langgraph_instrumentation.__all__ == [
+    assert langchain_ollie.__all__ == [
         "Clock",
         "ClockReading",
         "CaptureMode",
@@ -146,6 +154,6 @@ def test_store_api_is_explicit() -> None:
 
 
 def test_adapter_api_is_explicit() -> None:
-    from langgraph_instrumentation import adapters
+    from langchain_ollie import adapters
 
     assert adapters.__all__ == ["LangGraphCallbackHandler"]

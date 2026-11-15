@@ -4,7 +4,7 @@ import argparse
 
 from local_agent import build_agent
 
-from langgraph_instrumentation import PerfettoExporter, RecordingSession, SQLiteTraceStore
+from langchain_ollie import PerfettoExporter, RecordingSession, SQLiteTraceStore
 
 
 def main() -> None:

@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     EvalAssessment,
     EvalError,
     EvalExecutionStatus,
@@ -20,7 +20,7 @@ from langgraph_instrumentation import (
     RecordingSession,
     SpanKind,
 )
-from langgraph_instrumentation.evals.inspect import (
+from langchain_ollie.evals.inspect import (
     summarize_failures,
     summarize_regression,
     turn_evidence,
@@ -171,7 +171,7 @@ def test_turn_evidence_validates_inputs() -> None:
 
 
 def test_summarize_regression_covers_outcomes_and_mismatches() -> None:
-    from langgraph_instrumentation import MetricRule, compare_runs
+    from langchain_ollie import MetricRule, compare_runs
 
     def trial(passed: bool, tokens: int) -> EvalTrial:
         status = EvalStatus.PASS if passed else EvalStatus.FAIL
@@ -191,7 +191,7 @@ def test_summarize_regression_covers_outcomes_and_mismatches() -> None:
 
 
 def _tokens(total: int) -> EvalMetrics:
-    from langgraph_instrumentation import EvalMetric, MetricCompleteness, MetricScope
+    from langchain_ollie import EvalMetric, MetricCompleteness, MetricScope
 
     return EvalMetrics(
         {

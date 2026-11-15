@@ -2,7 +2,7 @@
 
 from local_agent import build_agent
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     EvalCase,
     EvalRunner,
     EvalTurn,

@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     CaseAggregate,
     CaseComparison,
     ComparisonKind,

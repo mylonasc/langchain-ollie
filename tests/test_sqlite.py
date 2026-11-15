@@ -11,7 +11,7 @@ from dataclasses import replace
 import pytest
 from perfetto_support import assert_imported_spans
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     MetricPoint,
     RecordingSession,
     Span,
@@ -134,7 +134,7 @@ def test_crashed_process_recovery_is_explicit_and_lower_bound(tmp_path):
     path = tmp_path / "crash.db"
     code = """
 import os,sys
-from langgraph_instrumentation import SQLiteTraceStore,TraceRecorder,SpanKind
+from langchain_ollie import SQLiteTraceStore,TraceRecorder,SpanKind
 store=SQLiteTraceStore(sys.argv[1])
 recorder=TraceRecorder(store)
 span=recorder.start_span('root','root',SpanKind.GRAPH)
@@ -192,7 +192,7 @@ def test_actual_agents_survive_sqlite_reopen(
     restored = reopened.get_trace(expected.trace.trace_id)
     assert restored == expected
     assert "SQLITE-PRIVATE-CANARY" not in json.dumps(restored.to_dict())
-    from langgraph_instrumentation import PerfettoExporter
+    from langchain_ollie import PerfettoExporter
 
     first, second = io.StringIO(), io.StringIO()
     PerfettoExporter().export([expected], first)
@@ -223,7 +223,7 @@ def test_local_cli_lists_summarizes_and_exports(tmp_path):
 
     def cli(*args):
         return subprocess.run(
-            [sys.executable, "-m", "langgraph_instrumentation", *map(str, args)],
+            [sys.executable, "-m", "langchain_ollie", *map(str, args)],
             capture_output=True,
             text=True,
             timeout=10,
@@ -257,7 +257,7 @@ def test_reopened_sqlite_artifact_is_importable(
     store = SQLiteTraceStore(path)
     bundle = store.get_trace(session.snapshot()[0].trace.trace_id)
     assert bundle is not None
-    from langgraph_instrumentation import PerfettoExporter
+    from langchain_ollie import PerfettoExporter
 
     destination = tmp_path / "trace.json"
     PerfettoExporter().export([bundle], destination, diagnostics=store.diagnostics)

@@ -12,7 +12,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, RetryPolicy, Send, interrupt
 from perfetto_support import assert_imported_spans, query
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     MemoryTraceStore,
     PerfettoExporter,
     RecordingSession,

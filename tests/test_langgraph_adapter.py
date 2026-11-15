@@ -8,7 +8,7 @@ import pytest
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     CapturePolicy,
     LangGraphCallbackHandler,
     SpanKind,

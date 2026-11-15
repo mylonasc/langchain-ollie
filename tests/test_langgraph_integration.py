@@ -7,7 +7,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langgraph.graph import END, START, StateGraph
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     CapturePolicy,
     DeterministicClock,
     DeterministicIdGenerator,
@@ -16,7 +16,7 @@ from langgraph_instrumentation import (
     SpanKind,
     TraceRecorder,
 )
-from langgraph_instrumentation.models import Span, TraceBundle
+from langchain_ollie.models import Span, TraceBundle
 
 
 class AgentState(TypedDict):

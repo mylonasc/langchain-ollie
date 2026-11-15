@@ -140,7 +140,7 @@ class TraceRecorder:
         strict: bool = False,
         shutdown_timeout: float | None = 30.0,
         completed_context_cache_size: int = 4096,
-        service_name: str = "langgraph-instrumentation",
+        service_name: str = "langchain-ollie",
         resource_attributes: Attributes | None = None,
         limits: RecordingLimits | None = None,
         owns_store: bool = True,

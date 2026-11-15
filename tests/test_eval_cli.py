@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     EvalAssessment,
     EvalCase,
     EvalExecutionStatus,
@@ -22,7 +22,7 @@ from langgraph_instrumentation import (
     save_cases,
     save_run,
 )
-from langgraph_instrumentation.evals.cli import main as evals_main
+from langchain_ollie.evals.cli import main as evals_main
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
@@ -307,7 +307,7 @@ def test_report_writes_offline_html(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 
 def _candidate_cases(path: Path) -> Path:
-    from langgraph_instrumentation import EvalCase, EvalTurn, ExactText, save_cases
+    from langchain_ollie import EvalCase, EvalTurn, ExactText, save_cases
 
     destination = path / "candidate.json"
     save_cases(
@@ -415,7 +415,7 @@ def test_proposal_lifecycle_through_cli(tmp_path: Path, capsys: Any) -> None:
 def test_inspect_resolves_calls_from_read_only_trace_db(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: Any, local_agent: Any
 ) -> None:
-    from langgraph_instrumentation import (
+    from langchain_ollie import (
         EvalRunner,
         LangGraphEvalAdapter,
         SQLiteTraceStore,

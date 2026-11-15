@@ -32,7 +32,7 @@ class _PsutilSource:
         try:
             import psutil
         except ImportError:
-            raise ImportError("install langgraph-instrumentation[resources] to sample") from None
+            raise ImportError("install Ollie with the resources extra to sample") from None
         self._process = psutil.Process(os.getpid())
 
     def read(self) -> ProcessReading:

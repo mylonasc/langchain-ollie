@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from langgraph.graph import END, START, StateGraph
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     CapturePolicy,
     MemoryTraceStore,
     RecordingLimits,

@@ -12,6 +12,10 @@ classes, protocols and runtime interactions in more detail.
 
 ## Data flow
 
+One recording can answer several questions: where time went, what tools ran, and
+whether an evaluation met its budget. The common path below captures the evidence
+once, then makes it available to each consumer.
+
 ```mermaid
 %%{init: {"flowchart": {"htmlLabels": false}}}%%
 flowchart TB
@@ -62,6 +66,9 @@ is a completed-span consumer. Neither is started by default.
 
 ### From callback to useful evidence
 
+Each stage narrows the problem: framework-specific callbacks become safe,
+portable evidence that storage and visualization can consume independently.
+
 1. **Attach explicitly.** `RecordingSession` assembles a handler, recorder and
    store. Pass `session.handler` in the agent's callback config; the library does
    not patch the runtime or construct your agent.
@@ -84,6 +91,10 @@ is a completed-span consumer. Neither is started by default.
 
 ### Responsibilities and extension points
 
+Use the session for ordinary recording. If your application needs a different
+store or a completed-span destination, extend the corresponding protocol rather
+than replacing the callback handler or recorder.
+
 | Component | Responsibility | Deliberately does not own |
 | --- | --- | --- |
 | `RecordingSession` | User-facing composition, shutdown, snapshot and Perfetto export | Agent construction or execution |
@@ -104,6 +115,10 @@ and the directory-level contracts below before implementing either.
 
 ## Dependency direction
 
+The dependency rules keep new integrations from changing core tracing behavior.
+They matter when extending or contributing to the library: a storage backend
+should not need LangGraph, and a viewer should not dictate how execution is recorded.
+
 - Neutral models import no adapter, store implementation or exporter.
 - Stores depend only on neutral models and store-level protocols.
 - Exporters depend only on neutral models, exporter protocols and optional SDKs.
@@ -121,6 +136,11 @@ Evaluation runs reuse the same recorder and neutral records. They emit portable
 case/trial/run artifacts and trace references, not a second timeline.
 
 ## Session lifecycle and failure isolation
+
+Closing a recording should release resources without hiding an application
+failure. The ownership rules below explain what the session closes and what you
+must still manage yourself. For runnable examples, see
+[lifecycle and ownership](../README.md#lifecycle-and-ownership).
 
 Use one session per bounded recording window and finish consuming any streams
 before closing it. A session can contain multiple invocations; concurrent roots
@@ -143,6 +163,10 @@ flush or close their own recorder. Timeouts are cooperative, not hard cancellati
 
 ## Evaluations build on tracing
 
+An answer can be correct while its execution is unnecessarily expensive. The
+evaluation layer checks answers and execution evidence together, using the same
+traces you inspect in Perfetto.
+
 `EvalRunner` creates a fresh session per case trial. `LangGraphEvalAdapter`
 attaches that session's callback to each turn and normalizes the agent result.
 The runner measures the resulting neutral traces and supplies `EvalContext` to
@@ -158,6 +182,10 @@ and comparison then apply explicit quality and performance gates. See the
 
 ## Boundaries
 
+Use traces as evidence of observed execution, not as proof of facts the callbacks
+cannot establish. These limits are important when interpreting performance or
+deciding whether this library fits your application.
+
 - Spans express containment. Causal links require explicit evidence and are never
   inferred from names, timing or containment.
 - Metadata-only capture is the default. Bounded or full payload capture is explicit,
@@ -172,8 +200,8 @@ and comparison then apply explicit quality and performance gates. See the
   [ADR-001](adr/001-profiler-correlation.md). The OTel bridge is export-only per
   [ADR-002](adr/002-otel-export-only.md).
 
-Directory-level contracts are in
-`src/langgraph_instrumentation/adapters/AGENT.md`,
-`src/langgraph_instrumentation/stores/AGENT.md`,
-`src/langgraph_instrumentation/exporters/AGENT.md` and
-`src/langgraph_instrumentation/evals/AGENT.md`.
+When contributing an extension, follow the local contracts for
+[adapters](../src/langchain_ollie/adapters/AGENT.md),
+[stores](../src/langchain_ollie/stores/AGENT.md),
+[exporters](../src/langchain_ollie/exporters/AGENT.md) and
+[evaluations](../src/langchain_ollie/evals/AGENT.md).

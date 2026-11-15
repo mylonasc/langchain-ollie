@@ -499,7 +499,7 @@ def _run_metadata(
 def _environment(supplied: Mapping[str, object] | None) -> Mapping[str, object]:
     packages: dict[str, str] = {}
     for name in (
-        "langgraph-instrumentation",
+        "langchain-ollie",
         "langchain-core",
         "langgraph",
         "deepagents",

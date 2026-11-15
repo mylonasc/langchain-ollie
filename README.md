@@ -1,17 +1,57 @@
-# LangGraph Instrumentation
+<h1 align="center">OLLIE: Open Local LangGraph Instrumentation &amp; Evaluation</h1>
 
-Safe, bounded **local agent performance traces**, viewed offline in
-[Perfetto](https://ui.perfetto.dev). No server, provider credentials, or monitoring
-backend is required. Callback durations describe elapsed execution, not CPU time.
+<p align="center"><strong>Local Tracing and Evaluation for LangGraph and Deep Agents</strong></p>
 
-Node wall duration includes callback overhead, scheduling, child work and waits;
-overlapping durations must not be summed as CPU time or advertised as a proven
-critical path. No automatic cross-process tracing, host tool sandbox, background
-export service or full distributed-context propagation is installed.
+Ollie is a local-first Python toolkit for tracing and evaluating agents built with
+LangGraph and Deep Agents. It helps you investigate slow operations, repeated
+tool calls and excessive token use, then turn those findings into repeatable
+checks for correctness and execution budgets.
+
+Explore portable execution traces visually in [Perfetto](https://ui.perfetto.dev),
+define and run evaluation datasets, and compare candidate runs with a baseline
+using trace-derived metrics and local HTML reports. The default workflow requires
+no observability server, collector or external database. Your agent and model
+construction stay unchanged.
+
+## Why Ollie?
+
+Agent optimization is not just about choosing a faster model. Excessive token use
+can come from repeated model calls, unnecessary tool round trips, or the context
+supplied at each step. Ollie brings reported token usage together with execution
+structure so you can locate expensive patterns and test changes to context
+engineering and agent tool design. For example, compare a tighter context strategy
+or a tool that returns more focused results, then check whether token use and call
+counts improve without sacrificing answer quality. Inspecting prompt or tool
+content requires explicit capture; bodies are not recorded by default.
+
+Portable visual inspection keeps the investigation close to the code: export a
+trace file and open it in Perfetto to explore nested operations, overlapping work
+and repeated calls without deploying a dashboard. An offline Perfetto viewer can
+be used in restricted environments. Trace artifacts can still contain sensitive
+metadata or explicitly captured content; review them before sharing.
+
+Ollie grew out of a need to investigate agent behavior in environments where
+hosted services, additional infrastructure and software approval processes can
+slow development. It provides an MIT-licensed, artifact-first workflow for teams
+that want local tracing and evaluation without deploying a broader observability
+platform. Bounded recording and explicit integrations keep the setup focused on
+the development loop: inspect, change, evaluate and compare. Evaluation gates
+check the workloads you define; they do not guarantee production performance.
+
+Start with the quickstart below, then choose your next task:
+
+- [Read a timeline](#view-locally) to understand where elapsed time went.
+- [Evaluate an agent](docs/evals.md) to protect answer quality and execution budgets.
+- [Choose capture limits](#safety-and-recording-limits) before recording sensitive data.
+- [Explore the documentation](docs/README.md) for architecture, extensions and operations.
 
 ## Quickstart: trace a LangGraph agent
 
-From a checkout of this repository, install dependencies (Python 3.12–3.14):
+Create your first trace with a local scripted model, so you can learn the recording
+API without API keys or provider calls. From a checkout of this repository,
+install dependencies (Python 3.12–3.14). The distribution is named
+`langchain-ollie`, and Python imports use `langchain_ollie`. Install this checkout
+to use the current unreleased version:
 
 ```bash
 uv sync --group dev --group agents
@@ -24,7 +64,7 @@ scripted chat model, so you can try tracing without API keys or network calls:
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langgraph.graph import END, START, MessagesState, StateGraph
 
-from langgraph_instrumentation import RecordingSession
+from langchain_ollie import RecordingSession
 
 model = FakeListChatModel(responses=["Hello! I am a traced LangGraph agent."])
 
@@ -72,10 +112,10 @@ scope, `config={"callbacks": [recording.handler]}` on invocation, and
 
 ## More runnable examples
 
-For the design behind the API, see the [architecture overview](docs/architecture.md)
-and [UML class and interaction diagrams](docs/uml.md).
-
-Python 3.12–3.14, standard GIL-enabled CPython:
+Use these examples to see tool calls and delegated agents in a trace before
+instrumenting your own application. They run on Python 3.12–3.14, standard
+GIL-enabled CPython. For the design behind the API, see the
+[architecture overview](docs/architecture.md) and [class diagrams](docs/uml.md).
 
 ```bash
 uv sync --group dev --group agents
@@ -87,6 +127,9 @@ local addition tool. It prints `Result: 5` and writes a Perfetto artifact. It ne
 calls an LLM provider.
 
 ### Deep Agents, without a provider
+
+Delegation adds nested graph and tool activity. This example makes that structure
+visible using a coordinator and worker that both run locally:
 
 ```bash
 uv sync --group dev --group agents
@@ -100,16 +143,14 @@ There are no host-file or shell tools and no model-provider fallbacks. The resul
 is `Result: 10. Report written and read; worker completed.` The virtual report is
 returned in agent state; no `/report.txt` is written to your computer.
 
-`examples/scripted_model.py` implements tool binding, explicit sync/async methods,
-fragmented tool-call streaming, and usage emitted once per model call. It is
-example/test support, not part of the library API. Both examples use real agent
-runtimes and the same public recording API. User applications can attach it to
-their own Deep Agents through the callback config shown below.
+Both examples use real agent runtimes with scripted models in place of provider
+calls. The scripted models are example support, not part of the library API.
 
-For your own application, install the package with your modern agent runtime:
+For your own application, install this checkout with `pip install .` alongside
+your supported agent runtime, and use your existing compiled application as `app`:
 
 ```python
-from langgraph_instrumentation import RecordingSession
+from langchain_ollie import RecordingSession
 
 with RecordingSession() as recording:
     result = app.invoke(inputs, config={"callbacks": [recording.handler]})
@@ -119,20 +160,21 @@ recording.export("trace.json")
 ```
 
 The same callback works with `await app.ainvoke(...)`, `app.stream(...)`, and
-`app.astream(...)`. Finish consuming streams before closing a session. Deep Agents
-e2e tests cover all four methods, nested worker chunks, token accounting, privacy,
-and repeated runs sharing the callback. Per-token event capture stays disabled by
-default. Use one session per bounded recording window. Concurrent invocations
-sharing a handler retain separate trace IDs and parentage.
+`app.astream(...)`. Finish consuming streams before closing a session. Per-token
+event capture stays disabled by default. Use one session per bounded recording
+window; concurrent invocations sharing a handler retain separate trace IDs and
+parentage. See [session ownership](#session-resource-ownership) before sharing
+stores or managing shutdown yourself.
 
 ## Evaluations
 
-The evaluation layer runs local cases under `RecordingSession` and derives metrics
-from the same neutral traces. It is not a second tracing implementation and does
-not require a provider, server or database.
+Use evaluations when you want to catch wrong answers or expensive execution
+patterns before they become regressions. The runner executes cases under
+`RecordingSession` and derives measurements from the same traces. Given an
+application `app` that answers the addition request:
 
 ```python
-from langgraph_instrumentation import (
+from langchain_ollie import (
     EvalCase,
     EvalRunner,
     EvalTurn,
@@ -148,10 +190,11 @@ run = EvalRunner(LangGraphEvalAdapter(app)).run([case])
 assert run.passed
 ```
 
-`EvalRunner` creates a fresh recording session and store per case trial, so cases
-cannot observe each other's traces or conversation state. `LangGraphEvalAdapter`
-attaches the callback through the runtime config and can either accumulate message
-history or use a per-run checkpoint `thread_id`. Turn checks run after each turn;
+`EvalRunner` creates a fresh recording session and store per case trial to isolate
+traces. `LangGraphEvalAdapter` attaches the callback and isolates conversation
+history by case and trial, using accumulated messages or a trial-specific
+checkpoint `thread_id`. Your application remains responsible for any other state
+in its models or tools. Turn checks run after each turn;
 case checks run after the conversation. JSON, JSONL and CSV datasets load through
 `load_cases`/`save_cases`.
 
@@ -164,29 +207,22 @@ Run the offline example with:
 uv run --no-sync python examples/local_eval.py
 ```
 
-Repeated trials aggregate with `aggregate_run`
-(fail-safe `WORST` by default; explicit `BEST`/`MAJORITY` and `MEAN`/`MEDIAN`
-metric policies), and `compare_runs` separates quality from explicit `MetricRule`
-performance gates with tolerance, direction and missing-metric policy. Structured
-state checks use `StatePredicate`; optional judges adapt via `JudgeEvaluator`
-without adding a provider dependency.
-
-Runs, aggregates and comparisons persist as canonical JSON through `save_run`,
-`save_aggregate`, `save_comparison` (or mixed JSONL via `save_artifacts`) and
-reopen with `load_run`, `load_aggregate`, `load_comparison`, `load_any` and
-`load_artifacts`. Artifacts reference traces by ID and never embed payloads.
-The same operations are available offline from the command line, including a
-static HTML report and CI-friendly exit codes:
+Repeat cases to reveal inconsistent behavior, then compare a candidate against
+a baseline. Quality regressions always matter; performance gates apply to metrics
+you explicitly choose. Save results with `save_run` for later comparison or use
+the CLI with your own dataset and importable application factory:
 
 ```bash
-uv run --no-sync python -m langgraph_instrumentation evals run cases.json \
+uv run --no-sync python -m langchain_ollie evals run cases.json \
   --agent mymodule:build_app --out run.json
-uv run --no-sync python -m langgraph_instrumentation evals compare base.json run.json \
+uv run --no-sync python -m langchain_ollie evals compare base.json run.json \
   --rule "tokens.total:lower_is_better:10:0.05"
-uv run --no-sync python -m langgraph_instrumentation evals report run.json --out report.html
+uv run --no-sync python -m langchain_ollie evals report run.json --out report.html
 ```
 
-See `docs/evals.md` for the artifact schema, CLI reference and exit codes.
+See the [evaluation guide](docs/evals.md) for runnable cases, metric interpretation,
+artifact persistence, comparison policies and CI exit codes. Saved results can
+contain agent answers even when trace payload capture is disabled.
 
 ### End-to-end demonstration
 
@@ -202,19 +238,20 @@ lower token consumption while answers stay identical.
 uv run --no-sync python examples/eval_demo.py --out-dir /tmp/eval-demo
 ```
 
-Limits: scripted token counts stand in for provider usage, one redundant-fetch
-pattern stands in for real bottlenecks, and the "external agent" step is a
-deterministic script over public interfaces rather than an autonomous loop.
-`tests/test_eval_demo.py` pins the gate: the baseline fails the golden
-budgets, the optimized agent passes, and the reversed comparison regresses.
+The baseline fails the new budgets, the optimized agent passes, and reversing
+the comparison detects a regression. Scripted token counts make the result
+reproducible; they are not real provider-cost measurements. The proposal step is
+scripted rather than autonomous. Follow the [review workflow](docs/agent-eval-workflow.md)
+to apply the same process to your own findings.
 
 ### Agent-facing inspection and evaluation workflows
 
-Coding agents work through bounded, read-only summaries that never require
-internal modules or database access:
+Use bounded, read-only summaries to give a coding agent focused evidence rather
+than an entire recording. Given a saved `run` and separately retained trace
+`bundles`:
 
 ```python
-from langgraph_instrumentation import summarize_failures, turn_evidence
+from langchain_ollie import summarize_failures, turn_evidence
 
 summary = summarize_failures(run)  # failed trials, reasons, trace IDs
 evidence = turn_evidence(run, "add", 0, traces=bundles)  # calls, metrics, output
@@ -224,16 +261,22 @@ Candidate dataset changes are explicit `EvalProposal` records with rationale,
 evidence references and fully specified cases. They validate structurally,
 record an accept/reject `ReviewRecord` with reviewer provenance, and only then
 merge into golden datasets via `apply_proposal` — collisions fail instead of
-overwriting silently. The packaged walkthrough in
-`docs/agent-eval-workflow.md` runs the full loop offline using only public
-interfaces; no MCP server, agent runtime or hosted service is introduced.
+overwriting silently. The [dataset-improvement walkthrough](docs/agent-eval-workflow.md)
+shows how to inspect results, draft a case, review it and verify the expanded suite.
 
 ## View locally
 
-Open Perfetto and use **Open trace file**. For sensitive data or air-gapped work,
+Use the timeline to identify long operations, overlapping work and repeated
+calls. Open Perfetto and use **Open trace file**. For sensitive data or air-gapped work,
 use the [self-hosted/offline Perfetto UI](https://perfetto.dev/docs/visualization/offline)
 instead of depending on the hosted viewer. No upload/export destination is
 configured by this library.
+
+Durations measure elapsed wall time, including scheduling, waits, callback
+overhead and child work. They are not CPU measurements: do not sum overlapping
+slices as CPU time or treat them as a proven critical path. Use
+[process counters](#optional-process-resource-counters) for process-wide resource
+measurements.
 
 Tracks separate overlapping operations, even when a node name is repeated.
 `contains` arrows show **span containment**, not graph transitions, data flow,
@@ -243,8 +286,9 @@ and an `incomplete` flag. Unfinished spans become abandoned on orderly shutdown.
 
 ### Graph identity, retries and checkpoints
 
-Callback UUIDs identify individual executions; node names alone do not identify a
-task. Step/path/namespace/checkpoint metadata is retained where supplied. Root
+Retries and resumed runs can repeat the same node name. Use callback IDs and
+parentage to distinguish individual executions; node names alone do not identify
+a task. Step/path/namespace/checkpoint metadata is retained where supplied. Root
 status describes the invocation's outcome: a handled failed retry does not turn a
 successful root into an error, and failed attempt spans remain visible. Runtime
 interrupts are control flow, not application errors; `execution.interrupted` marks
@@ -254,7 +298,7 @@ A resumed invocation is a new trace, not a span that pretends to survive restart
 Link it explicitly to the prior root:
 
 ```python
-from langgraph_instrumentation import SpanLink
+from langchain_ollie import SpanLink
 
 link = SpanLink(previous_root.trace_id, previous_root.span_id, "resumes")
 config = {
@@ -271,12 +315,16 @@ in default mode and are rejected in strict mode.
 
 ## Safety and recording limits
 
+Choose the smallest amount of captured data that answers your question. Start
+with the default metadata-only mode; opt into content only when you need it, and
+review the [security guidance](SECURITY.md#protecting-recordings) before sharing.
+
 Metadata-only capture is the default: bodies are replaced with original types and
 sizes without traversing builtin container contents. Exceptions retain only their
 type; internal diagnostics never log exception bodies or tracebacks.
 
 ```python
-from langgraph_instrumentation import CapturePolicy, RecordingLimits, RecordingSession
+from langchain_ollie import CapturePolicy, RecordingLimits, RecordingSession
 
 with RecordingSession(
     capture=CapturePolicy.bounded(max_string_length=200),
@@ -287,8 +335,9 @@ with RecordingSession(
 
 Content capture is explicit and may expose sensitive text. `RedactionPolicy`
 redacts matching mapping fields but is not a universal secret detector for free
-text. Message content is never deduplicated across recordings. Exception message
-capture requires `capture_exception_messages=True`; stack capture is not supported.
+text. Exception message capture requires constructing a `LangGraphCallbackHandler`
+with `capture_exception_messages=True` and an appropriate content policy; stack
+capture is not supported.
 All capture modes retain safety budgets of 2,048 traversal nodes, 16 KiB encoded
 payload and depth 64. `full()` removes the smaller bounded-mode limits, not these
 safety budgets; truncation and budget markers are explicit.
@@ -315,47 +364,57 @@ recorder budgets.
 
 ## Lifecycle and ownership
 
+Choose memory recording for a short session you will export immediately, or
+SQLite when you need to reopen traces later. In either case, finish agent work
+before closing the recording and keep resource ownership explicit.
+
 ### Durable local recording
 
-Runnable no-network close/reopen example (use a new database path):
+SQLite preserves records for later inspection without a service. Try the
+close/reopen example with a new database path:
 
 ```bash
 uv run --no-sync python examples/local_sqlite.py agent.db sqlite-trace.json
 ```
 
 ```python
-from langgraph_instrumentation import RecordingSession, SQLiteTraceStore
+from langchain_ollie import RecordingSession, SQLiteTraceStore
 
 store = SQLiteTraceStore("agent.db")  # new dedicated recording database
-with RecordingSession(store=store) as recording:
-    result = app.invoke(inputs, config={"callbacks": [recording.handler]})
-store.close()
+try:
+    with RecordingSession(store=store) as recording:
+        result = app.invoke(inputs, config={"callbacks": [recording.handler]})
+finally:
+    store.close()
 ```
 
-Later, from another process:
+Later, from another process, list the traces and use one returned ID in place of
+`TRACE_ID` to inspect or export it:
 
 ```bash
-python -m langgraph_instrumentation list agent.db --limit 20 --offset 0
-python -m langgraph_instrumentation summary agent.db TRACE_ID
-python -m langgraph_instrumentation export agent.db TRACE_ID trace.json
+python -m langchain_ollie list agent.db --limit 20 --offset 0
+python -m langchain_ollie summary agent.db TRACE_ID
+python -m langchain_ollie export agent.db TRACE_ID trace.json
 ```
 
-CLI inspection uses read-only connections. The store uses versioned schema v1,
-transactions, WAL and a serialized connection; it stores neutral records, links,
-resource identity, events and metrics, not Perfetto dictionaries. Session loss
-diagnostics persist on orderly close. `TraceQuery` bounds listing reads;
+CLI inspection uses read-only connections. SQLite stores execution records rather
+than prebuilt Perfetto output, so you can query them or export a timeline later.
+Session loss diagnostics persist on orderly close. `TraceQuery` bounds listing reads;
 `delete_traces(before_unix_ns=...)` removes whole finalized traces only. Exact
 start/completion replays are idempotent; unknown schemas are never migrated
 silently.
 
 After a crashed writer, normal open preserves unfinished spans. **Only after all
 previous writers have stopped**, opt into `SQLiteTraceStore(path, recover=True)`
-or `python -m langgraph_instrumentation recover agent.db`. Recovery marks work
+or `python -m langchain_ollie recover agent.db`. Recovery marks work
 abandoned and its duration as a last-observed lower bound. Do not reuse a nonempty
 database with a new `RecordingSession`; reopen it for query/export or start a new
 recording file. Prefer memory capture when minimizing callback I/O overhead.
 
 ### Session resource ownership
+
+The context manager handles shutdown for the usual recording path. When supplying
+your own store, keep its lifetime separate from the session's:
 
 The session owns and closes its default memory store. A supplied `store=` must be
 empty and dedicated to this recording; it remains open after session shutdown.
@@ -377,6 +436,10 @@ succeed before its response is lost.
 
 ## Supported scope and migration
 
+Use the tested modern runtime versions below. If you are upgrading from the
+prototype, migrate to explicit session/callback attachment instead of trying to
+preserve the old import paths.
+
 The locked/minimum baseline is `langchain-core==1.8.0`, `langgraph==1.2.21`, and
 `deepagents==0.7.38`. CI tests locked/current supported resolutions within core
 1.8.x, LangGraph 1.2.x, and Deep Agents 0.7.x on Python 3.12–3.14. Deep Agents is a
@@ -392,6 +455,10 @@ upgrade notes and [`docs/architecture.md`](docs/architecture.md) for component
 boundaries.
 
 ## Development and artifact verification
+
+Before submitting a code change, run the configured checks below. Default tests
+use local scripted models, so provider credentials and network access are not
+needed. See the [contributor guide](AGENTS.md) for architecture and test contracts.
 
 ```bash
 uv sync --group dev --group agents --group resources --group otel
@@ -424,16 +491,24 @@ are not claimed by this matrix. See [release/upgrade notes](CHANGELOG.md),
 
 ## Optional integrations
 
+Local tracing works without any of these additions. Enable a resource sampler
+when process-level counters answer your question, or an export bridge when you
+already have a destination for telemetry.
+
 ### Optional process resource counters
 
-Install `pip install 'langgraph-instrumentation[resources]'` or
+Add counters when you need to distinguish elapsed waits from process-wide CPU or
+memory activity. They complement operation durations; they do not attribute
+resources to individual overlapping agents.
+
+From a checkout, install `pip install '.[resources]'` or
 `uv sync --group dev --group agents --group resources`, then run:
 
 ```bash
 uv run --no-sync python examples/local_resources.py resources.json
 ```
 
-`from langgraph_instrumentation.resources import ProcessSampler` is opt-in; no
+`from langchain_ollie.resources import ProcessSampler` is opt-in; no
 sampler thread or psutil import occurs on default library import. Use
 `with ProcessSampler(recording.recorder, interval=0.1, max_samples=600): ...` inside
 the recording scope. A separate **process** trace contains CPU seconds, RSS bytes,
@@ -445,10 +520,16 @@ process, never an individual overlapping agent or subprocess.
 The sampler has no extra sample buffer, stops at its attempt cap, shares recorder
 budgets, and must close before the recording. Source calls must return promptly;
 a timed-out close cannot forcibly interrupt a native/custom source call.
+See [sampler overhead and reproduction](benchmarks/REF09_RESOURCES.md) when choosing
+an interval and sample cap.
 
 ### Optional OpenTelemetry export-only bridge
 
-Install `pip install 'langgraph-instrumentation[otel]'`. The no-network SDK demo:
+Use this bridge to send completed local spans to an existing SDK exporter while
+keeping local recording independent of destination failures. It does not turn
+the library into a distributed tracing integration.
+
+From a checkout, install `pip install '.[otel]'`. The no-network SDK demo:
 
 ```bash
 uv sync --group dev --group agents --group resources --group otel
@@ -457,7 +538,7 @@ uv run --no-sync pytest -m otel
 ```
 
 Use `OpenTelemetryProcessor(exporter)` from
-`langgraph_instrumentation.exporters.otel` in `RecordingSession(processors=[...])`.
+`langchain_ollie.exporters.otel` in `RecordingSession(processors=[...])`.
 Supply an explicit trusted SDK SpanExporter (for example OTLP/HTTP with a chosen
 endpoint); the bridge owns it. Default batching uses the SDK's bounded queue.
 No SDK import, global provider, exporter environment configuration, or network
@@ -469,17 +550,18 @@ flags/tracestate, SDK sampling and outgoing/manual-child propagation do not.
 Converted spans are sampled INTERNAL spans; richer kinds/statuses stay namespaced.
 No GenAI/OpenInference semantic compliance or metric export is claimed. Read
 [ADR-002](docs/adr/002-otel-export-only.md) for mapping and lifecycle/loss limits.
-`force_flush(seconds)` is bounded by SDK policy; shutdown bounds the caller's wait
-but cannot kill an uncooperative foreign exporter. A destination failure does not
-erase local Perfetto records. The optional suite uses only an isolated loopback
+Flush and shutdown bound the caller's wait but cannot kill an uncooperative
+foreign exporter. A destination failure does not erase local Perfetto records.
+The optional suite uses only an isolated loopback
 OTLP receiver, never an external service; the default suite excludes it.
 
 ### Scope limits and alternatives
 
-Full distributed propagation and automatic stack timeline correlation are not
-provided. [ADR-001](docs/adr/001-profiler-correlation.md) records the no-go for
-automatic py-spy Speedscope alignment; no profiler, attach or privilege escalation
-ships. For broader monitoring, evaluate
+This library focuses on bounded, single-process execution evidence. Automatic
+cross-process tracing, full distributed propagation and stack timeline correlation
+are not provided. [ADR-001](docs/adr/001-profiler-correlation.md) explains why
+automatic py-spy/Speedscope alignment is unreliable. The library does not install
+or attach a profiler. For broader monitoring, evaluate
 [OpenInference](https://github.com/Arize-ai/openinference) with local Phoenix,
 MLflow Tracing or self-hosted Langfuse; this project focuses on standalone local
 artifacts.

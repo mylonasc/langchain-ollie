@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     EvalRunner,
     LangGraphEvalAdapter,
     MetricRule,
@@ -78,7 +78,7 @@ def test_demo_gate_rejects_regression(demo: Any) -> None:
 
 
 def test_demo_report_shows_tradeoff_and_missing_evidence(demo: Any, tmp_path) -> None:  # type: ignore[no-untyped-def]
-    from langgraph_instrumentation import render_report
+    from langchain_ollie import render_report
 
     build_baseline, build_optimized = _builders(demo)
     golden = load_cases(EXAMPLES / "eval_demo_cases_v2.json")

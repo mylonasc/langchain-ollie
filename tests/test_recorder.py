@@ -5,7 +5,7 @@ from typing import Any, cast
 
 import pytest
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     DeterministicClock,
     DeterministicIdGenerator,
     MemoryTraceStore,

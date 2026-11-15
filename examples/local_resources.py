@@ -4,8 +4,8 @@ import argparse
 
 from local_agent import build_agent
 
-from langgraph_instrumentation import RecordingSession
-from langgraph_instrumentation.resources import ProcessSampler
+from langchain_ollie import RecordingSession
+from langchain_ollie.resources import ProcessSampler
 
 
 def main():

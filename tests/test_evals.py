@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 from uuid import uuid4
 
 import pytest
 from langchain_core.messages import AIMessage
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     CapturePolicy,
     EvalCase,
     EvalOutput,
@@ -28,7 +29,7 @@ from langgraph_instrumentation import (
     load_cases,
     save_cases,
 )
-from langgraph_instrumentation.resources import ProcessReading, ProcessSampler
+from langchain_ollie.resources import ProcessReading, ProcessSampler
 
 
 class EchoApp:
@@ -358,6 +359,9 @@ def test_supplied_environment_is_distinguishable_from_extracted() -> None:
     )
     assert run.environment["supplied"] == {"git_commit": "abc123", "model.id": "scripted"}
     assert "python" in run.environment
+    packages = run.environment["packages"]
+    assert isinstance(packages, Mapping)
+    assert packages["langchain-ollie"] == "0.1.0"
 
 
 class TwoTraceApp:

@@ -16,8 +16,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
-from langgraph_instrumentation import RecordingSession, SpanKind, SpanLink
-from langgraph_instrumentation.exporters.otel import OpenTelemetryProcessor
+from langchain_ollie import RecordingSession, SpanKind, SpanLink
+from langchain_ollie.exporters.otel import OpenTelemetryProcessor
 os.environ['LANGSMITH_TRACING']='false'
 os.environ['LANGCHAIN_TRACING_V2']='false'
 for key in list(os.environ):

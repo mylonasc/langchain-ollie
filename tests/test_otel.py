@@ -14,8 +14,8 @@ from opentelemetry.sdk.trace.export import SpanExporter
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
 
-from langgraph_instrumentation import RecordingSession, SpanKind, SpanLink, SpanStatus
-from langgraph_instrumentation.exporters.otel import OpenTelemetryProcessor, to_otel_span
+from langchain_ollie import RecordingSession, SpanKind, SpanLink, SpanStatus
+from langchain_ollie.exporters.otel import OpenTelemetryProcessor, to_otel_span
 
 pytestmark = pytest.mark.otel
 
@@ -45,7 +45,7 @@ def test_actual_agent_sdk_parentage_resource_and_perfetto_unchanged(local_agent)
         assert span.attributes["local_trace.span.kind"] == original.kind.value
     output = io.StringIO()
     session.export(output)
-    from langgraph_instrumentation import PerfettoExporter
+    from langchain_ollie import PerfettoExporter
 
     assert json.loads(output.getvalue()) == PerfettoExporter().to_dict(
         session.snapshot(), diagnostics=session.diagnostics
@@ -128,9 +128,9 @@ def test_default_import_has_no_otel_sdk_or_bridge():
             sys.executable,
             "-c",
             (
-                "import sys; import langgraph_instrumentation; "
+                "import sys; import langchain_ollie; "
                 "assert 'opentelemetry.sdk' not in sys.modules; "
-                "assert 'langgraph_instrumentation.exporters.otel' not in sys.modules"
+                "assert 'langchain_ollie.exporters.otel' not in sys.modules"
             ),
         ],
         capture_output=True,

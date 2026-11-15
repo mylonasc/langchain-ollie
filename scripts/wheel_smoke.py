@@ -8,7 +8,7 @@ import socket
 import sys
 from pathlib import Path
 
-import langgraph_instrumentation as instrumentation
+import langchain_ollie as instrumentation
 
 
 def blocked(*args, **kwargs):
@@ -46,8 +46,8 @@ def main():
         ("summary", "agent.db", trace_id),
         ("export", "agent.db", trace_id, "cli.json"),
     ):
-        sys.argv = ["langgraph_instrumentation", *args]
-        runpy.run_module("langgraph_instrumentation", run_name="__main__")
+        sys.argv = ["langchain_ollie", *args]
+        runpy.run_module("langchain_ollie", run_name="__main__")
 
 
 if __name__ == "__main__":

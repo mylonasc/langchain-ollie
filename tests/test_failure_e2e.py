@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from langchain_core.tools import tool
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     MemoryTraceStore,
     RecordingLimits,
     RecordingSession,

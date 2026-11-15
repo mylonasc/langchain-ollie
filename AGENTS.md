@@ -15,7 +15,7 @@ issues. Work against each issue's scope and acceptance criteria.
 
 ## Repository Rules
 
-- Use the `src/langgraph_instrumentation/` package for library code.
+- Use the `src/langchain_ollie/` package for library code.
 - Keep examples outside the library package.
 - Do not restore prototype import paths; the clean API break is intentional.
 - Modern LangGraph/Deep Agents only. Rewrite or drop uncertain legacy framework
@@ -70,10 +70,10 @@ Tests must not depend on:
 
 Maintain scoped `AGENT.md` files with the directory they govern:
 
-- `src/langgraph_instrumentation/adapters/AGENT.md`
-- `src/langgraph_instrumentation/stores/AGENT.md`
-- `src/langgraph_instrumentation/exporters/AGENT.md`
-- `src/langgraph_instrumentation/evals/AGENT.md`
+- `src/langchain_ollie/adapters/AGENT.md`
+- `src/langchain_ollie/stores/AGENT.md`
+- `src/langchain_ollie/exporters/AGENT.md`
+- `src/langchain_ollie/evals/AGENT.md`
 
 The nearest guide supplements this file and documents local protocols, forbidden
 dependencies, and the contract or fixture suite implementations must pass. Review

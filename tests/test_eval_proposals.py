@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     EvalCase,
     EvalTurn,
     ExactText,
@@ -14,7 +14,7 @@ from langgraph_instrumentation import (
     load_cases,
     save_cases,
 )
-from langgraph_instrumentation.evals.proposals import (
+from langchain_ollie.evals.proposals import (
     EvalProposal,
     EvidenceKind,
     EvidenceRef,
@@ -172,7 +172,7 @@ def test_apply_requires_acceptance_and_protects_golden_cases() -> None:
 
 
 def test_proposal_and_feedback_persist_as_versioned_artifacts(tmp_path) -> None:
-    from langgraph_instrumentation import (
+    from langchain_ollie import (
         load_feedback,
         load_proposal,
         save_feedback,

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     ComparisonSummary,
     EvalAssessment,
     EvalExecutionStatus,
@@ -33,7 +33,7 @@ from langgraph_instrumentation import (
     save_comparison,
     save_run,
 )
-from langgraph_instrumentation.evals.comparison import ComparisonKind
+from langchain_ollie.evals.comparison import ComparisonKind
 
 
 def _run(run_id: str, passed: bool, tokens: int) -> EvalRun:

@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 from scripted_model import ScriptedModel
 
-from langgraph_instrumentation import RecordingSession
+from langchain_ollie import RecordingSession
 
 FILE_PATH = "/report.txt"
 FINAL_RESPONSE = "Result: 10. Report written and read; worker completed."

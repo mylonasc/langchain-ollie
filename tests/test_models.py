@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import pytest
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     DeterministicClock,
     DeterministicIdGenerator,
     ExecutionLane,
@@ -334,7 +334,7 @@ def test_event_and_metric_ties_have_canonical_total_order() -> None:
 
 
 def test_domain_modules_do_not_import_framework_or_backend_dependencies() -> None:
-    package_root = Path(__file__).parents[1] / "src" / "langgraph_instrumentation"
+    package_root = Path(__file__).parents[1] / "src" / "langchain_ollie"
     forbidden_roots = {
         "langchain",
         "langchain_core",

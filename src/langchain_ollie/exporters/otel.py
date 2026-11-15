@@ -77,7 +77,7 @@ def to_otel_span(span: Span) -> ReadableSpan:
         status=Status(code),
         start_time=span.start_time_unix_ns,
         end_time=span.end_time_unix_ns,
-        instrumentation_scope=InstrumentationScope("langgraph_instrumentation", "0.1.0"),
+        instrumentation_scope=InstrumentationScope("langchain_ollie", "0.1.0"),
     )
 
 

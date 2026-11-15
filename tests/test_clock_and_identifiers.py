@@ -3,7 +3,7 @@ from typing import cast
 
 import pytest
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     ClockReading,
     DeterministicClock,
     DeterministicIdGenerator,

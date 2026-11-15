@@ -14,9 +14,9 @@ import pytest
 from langchain_core.messages import ToolMessage
 from perfetto_support import assert_imported_spans, query
 
-import langgraph_instrumentation as library
-from langgraph_instrumentation import RecordingSession, SpanKind, SpanStatus
-from langgraph_instrumentation.adapters import LangGraphCallbackHandler
+import langchain_ollie as library
+from langchain_ollie import RecordingSession, SpanKind, SpanStatus
+from langchain_ollie.adapters import LangGraphCallbackHandler
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = (

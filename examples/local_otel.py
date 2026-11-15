@@ -5,8 +5,8 @@ import argparse
 from local_agent import build_agent
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from langgraph_instrumentation import RecordingSession
-from langgraph_instrumentation.exporters.otel import OpenTelemetryProcessor
+from langchain_ollie import RecordingSession
+from langchain_ollie.exporters.otel import OpenTelemetryProcessor
 
 
 def main():

@@ -1,10 +1,23 @@
 # ADR-002: optional neutral-record OpenTelemetry SDK consumer
 
 Status: accepted, 2026-11-14. **Export-only**, not full distributed
-context interoperability. Import explicitly from `exporters.otel` with the `otel`
-extra. Do not configure a global provider or read OTEL environment configuration.
+context interoperability.
+
+## Why this decision matters
+
+Applications may want to keep local Perfetto traces while also sending spans to
+an existing telemetry destination. The bridge supports that use case without
+making local recording depend on an SDK provider or collector. It does not carry
+remote context into or out of an agent invocation.
+
+For setup, use the [OpenTelemetry integration guide](../../README.md#optional-opentelemetry-export-only-bridge).
+For its place in the pipeline, see [recording and extension protocols](../uml.md#recording-and-extension-protocols).
 
 ## Alternatives and decision
+
+Export completed records rather than rebuilding tracing around the SDK. This
+preserves the local recording's identity and lifecycle while delegating delivery
+to the SDK's existing exporters.
 
 An SDK-backed callback adapter could inherit SDK context, sampling and propagation,
 but would couple local capture/lifecycle to an SDK/provider and require careful
@@ -17,6 +30,10 @@ batch/retry queue or OTLP encoder. Parentage, IDs, links and Unix timestamps sur
 conversion. Perfetto never imports this module or changes behavior.
 
 ## Context and sampling contract
+
+Use the bridge when exporting an already recorded local operation is sufficient.
+Choose an SDK-native integration instead when you need distributed parentage or
+propagation. The bridge preserves only the context the local model actually has:
 
 - IDs are the local recording IDs. Parent context is a **local** parent in the same
   trace. Cross-trace causal references remain OTel Links with relationship metadata.
@@ -32,6 +49,10 @@ conversion. Perfetto never imports this module or changes behavior.
   unless duplicate telemetry is intentional.
 
 ## Conventions (local version 1)
+
+Consumers need to know which meanings survive conversion. Keep local kinds and
+statuses explicit rather than guessing remote-service semantics from an agent's
+operation names.
 
 Preserve arbitrary local kinds/statuses in `local_trace.span.kind/status`;
 OTel kind is INTERNAL, never infer remote CLIENT/SERVER from an LLM/tool name.
@@ -52,6 +73,11 @@ not automatic renaming that changes meanings.
 
 ## Lifecycle, loss and privacy
 
+The supplied exporter is owned by the bridge and shuts down with it. Local
+recording remains independent, but successful local capture does not guarantee
+remote delivery. Inspect destination diagnostics and configure exporter logging
+with the [security guidance](../../SECURITY.md#protecting-recordings) in mind.
+
 The bridge owns the supplied exporter. Local TraceRecorder already isolates
 destinations; a rejecting exporter cannot erase local records. Its wrapper counts
 exceptions/failure results without logging exception bodies. Explicit exporter
@@ -60,7 +86,8 @@ implementations may still log; configure trusted SDK/exporter logging separately
 failure. Reviewed SDK 1.45.2 ignores that timeout in its blocking batch flush, so
 one shared flush worker bounds the caller wait independently; subsequent calls
 wait for the same ongoing flush rather than accumulating workers. This is not
-a custom telemetry queue or retry engine. SDK queue overflow follows SDK drop/metrics policy, not an exactly-once
+a custom telemetry queue or retry engine. SDK queue overflow follows SDK
+drop/metrics policy, not an exactly-once
 guarantee or an authoritative local export-loss count.
 
 SDK shutdown exposes no public timeout; one cleanup thread bounds the caller's

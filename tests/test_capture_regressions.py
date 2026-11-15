@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from langchain_core.messages import HumanMessage
 
-from langgraph_instrumentation import (
+from langchain_ollie import (
     CapturePolicy,
     LangGraphCallbackHandler,
     MemoryTraceStore,
